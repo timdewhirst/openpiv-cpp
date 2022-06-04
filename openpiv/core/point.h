@@ -9,6 +9,7 @@
 // local
 #include "core/format_utils.h"
 #include "core/util.h"
+#include "core/exception_builder.h"
 
 namespace openpiv::core {
 
@@ -54,8 +55,20 @@ public:
     constexpr inline bool operator==(const point& rhs) const { return data_ == rhs.data_; }
     constexpr inline bool operator!=(const point& rhs) const { return !operator==(rhs); }
 
-    constexpr inline const T& operator[](size_t i) const { return data_[i]; }
-    constexpr inline T& operator[](size_t i) { return data_[i]; }
+    constexpr inline const T& operator[](size_t i) const
+    {
+        if (i>=N)
+            exception_builder<std::out_of_range>() << "index out of range (" << N << "): " << i;
+
+        return data_[i];
+    }
+    constexpr inline T& operator[](size_t i)
+    {
+        if (i>=N)
+            exception_builder<std::out_of_range>() << "index out of range (" << N << "): " << i;
+
+        return data_[i];
+    }
 
     // return underlying data
     constexpr inline const data_t& data() const { return data_; }
