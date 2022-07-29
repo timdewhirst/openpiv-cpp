@@ -7,7 +7,6 @@
         "tiff",
         { "name": "benchmark", "platform": "!windows" },
         "asyncplusplus",
-        "pybind11",
         { "name": "mimalloc", "platform": "!(arm | uwp)" }
     ]
 }
