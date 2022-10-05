@@ -1,6 +1,9 @@
 
 #pragma once
 
+// local
+#include "core/util.h"
+
 // std
 #include <cinttypes>
 #include <cmath>
@@ -34,7 +37,8 @@ struct rgba
     rgba& operator=(rgba&&) = default;
     rgba& operator=( T v )
     {
-        std::swap( *this, rgba(v) );
+        rgba tmp{ v };
+        std::swap( *this, tmp );
         return *this;
     }
 
@@ -60,7 +64,7 @@ using rgba_32 = rgba<uint32_t>;
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const rgba<T>& rgba )
 {
-    os << "rgba(" << rgba.r << ", " << rgba.g << ", " << rgba.b << ", " << rgba.a << ")";
+    os << "rgba(" << +rgba.r << ", " << +rgba.g << ", " << +rgba.b << ", " << +rgba.a << ")";
     return os;
 }
 
@@ -80,7 +84,8 @@ struct yuva
     yuva& operator=(yuva&&) = default;
     yuva& operator=( T v )
     {
-        std::swap( *this, yuva(v) );
+        yuva tmp{ v };
+        std::swap( *this, tmp );
         return *this;
     }
 
@@ -106,7 +111,7 @@ using yuva_32 = yuva<uint32_t>;
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const yuva<T>& v )
 {
-    os << "yuva(" << v.y << ", " << v.u << ", " << v.v << ", " << v.a << ")";
+    os << "yuva(" << +v.y << ", " << +v.u << ", " << +v.v << ", " << +v.a << ")";
     return os;
 }
 
@@ -121,16 +126,25 @@ public:
     complex( const complex& ) = default;
     complex( complex&& ) = default;
 
+    constexpr complex( value_t r ) : real(r) {}
+    constexpr complex( value_t r, value_t i ) : real(r), imag(i){}
     template < typename U,
-               typename E = typename std::enable_if< std::is_convertible<U, T>::value >::type >
-    constexpr complex( U r, U i = U{} ) : real(r), imag(i){}
+               typename E = typename std::enable_if_t< std::is_convertible_v<U, T> > >
+    constexpr complex( U r ) : real(r) {}
+    template < typename U,
+               typename E = typename std::enable_if_t< std::is_convertible_v<U, T> > >
+    constexpr complex( U r, U i ) : real(r), imag(i) {}
     constexpr complex( const std::complex<T>& c ) : real(c.real()), imag(c.imag()) {}
 
     complex& operator=( const complex& c ) = default;
     complex& operator=( complex&& c ) = default;
     template < typename U,
-               typename E = typename std::enable_if< std::is_convertible<U, T>::value >::type >
-    complex& operator=( const complex<U>& c ) { real = c.real; imag = c.imag; return *this; }
+               typename E = typename std::enable_if_t< std::is_convertible_v<U, T> > >
+    complex& operator=( U r ) { real = r; imag = T{}; return *this; }
+    template < typename U,
+               typename E = typename std::enable_if_t< std::is_convertible_v<U, T> > >
+    complex& operator=( const complex<U>
+                        & c ) { real = c.real; imag = c.imag; return *this; }
 
     bool operator==( const complex& rhs ) const
     {
@@ -168,7 +182,7 @@ public:
     inline constexpr complex operator/( const complex& rhs ) const
     {
         const T &a{ real }, &b{ imag }, &c{ rhs.real }, &d{ rhs.imag };
-        const T denom{ c*c + d*d };
+        const T denom{ static_cast<T>(c*c + d*d) };
         return { (a*c + b*d)/denom, (b*c - a*d)/denom };
     }
 
@@ -196,9 +210,9 @@ public:
         return *this;
     }
 
-    inline constexpr complex conj() const { return { real, -imag }; }
+    inline constexpr complex conj() const { return { real, static_cast<T>(-imag) }; }
     inline constexpr T abs() const { return std::sqrt( abs_sqr() ); }
-    inline constexpr T abs_sqr() const { return (*this * conj()).real; }
+    inline constexpr T abs_sqr() const { return real*real + imag*imag; }
 
     T real{};
     T imag{};
@@ -231,20 +245,21 @@ inline constexpr complex<T> operator/( const T& lhs, const complex<T>& rhs )
 template <typename T>
 inline constexpr complex<T> exp( const complex<T>& c )
 {
-    const T e{ exp( c.real ) };
+
+    const T e{ static_cast<T>(std::exp( c.real )) };
     return complex<T>{ e * std::cos( c.imag ), e * std::sin( c.imag ) };
 }
 
-using c_8  = complex<uint8_t>;
-using c_16 = complex<uint16_t>;
-using c_32 = complex<uint32_t>;
+using c_8  = complex<int8_t>;
+using c_16 = complex<int16_t>;
+using c_32 = complex<int32_t>;
 using c_f  = complex<double>;
 
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const complex<T>& v )
 {
     static const char* sign[] = { " ", " +" };
-    os << v.real << sign[ v.imag< 0 ? 0 : 1 ] << v.imag << "j";
+    os << "complex(" << v.real << sign[ v.imag< 0 ? 0 : 1 ] << v.imag << "j)";
     return os;
 }
 
@@ -262,13 +277,13 @@ struct g
     g(const g&) = default;
     g(g&&) = default;
     template < typename U,
-               typename = typename std::enable_if< std::is_convertible< U, T >::value >::type >
+               typename = typename std::enable_if_t< std::is_convertible_v< U, T > > >
     g( U v_ ) : v(v_) {}
 
     g& operator=(const g&) = default;
     g& operator=(g&&) = default;
     template < typename U,
-               typename = typename std::enable_if< std::is_convertible< U, T >::value >::type >
+               typename = typename std::enable_if_t< std::is_convertible_v< U, T > > >
     inline g& operator=(U v_) { v = v_; return *this; }
 
     inline operator T() const { return v; }
@@ -291,7 +306,7 @@ inline g_f  operator ""_gf ( long double v )        { return g_f( v ); }
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const g<T>& v )
 {
-    os << "g" << v.v;
+    os << "g(" << v.v << ")";
     return os;
 }
 
@@ -477,7 +492,7 @@ constexpr std::string_view pixeltype_name()
     if constexpr (std::is_same_v<T, yuva_32>)
         return "yuva<uint32_t>";
 
-    return {};
+    return "unknown pixeltype";
 }
 
 
