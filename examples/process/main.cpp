@@ -102,7 +102,7 @@ int main( int argc, char* argv[] )
     logger::info("execution: {}", execution);
 
     // get images
-    std::vector<core::gf_image> images;
+    std::vector<core::image_g_f> images;
     try {
         for ( const auto& input_file : input_files )
         {
@@ -114,7 +114,7 @@ int main( int argc, char* argv[] )
             if ( !loader )
                 core::exception_builder<std::runtime_error>() << "failed to find loader for " << input_file;
 
-            core::gf_image image;
+            core::image_g_f image;
             loader->load( is, image );
             images.emplace_back(std::move(image));
         }
