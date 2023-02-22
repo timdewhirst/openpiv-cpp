@@ -66,6 +66,7 @@ else()
 endif()
 
 add_subdirectory(pybind)
+add_subdirectory(test)
 
 # install
 #install(TARGETS ${LIBNAME} DESTINATION lib/${LIBNAME})
