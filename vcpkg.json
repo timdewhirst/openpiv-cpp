@@ -1,12 +1,19 @@
 {
-    "name": "openpiv-cplusplus",
-    "version-string": "latest",
-    "dependencies": [
-        "catch2",
-        "cxxopts",
-        "tiff",
-        { "name": "benchmark", "platform": "!windows" },
-        "asyncplusplus",
-        { "name": "mimalloc", "platform": "!(arm | uwp)" }
-    ]
+  "name": "openpiv-cplusplus",
+  "version-string": "latest",
+  "dependencies": [
+    "asyncplusplus",
+    {
+      "name": "benchmark",
+      "platform": "!windows"
+    },
+    "catch2",
+    "cxxopts",
+    {
+      "name": "mimalloc",
+      "platform": "!(arm | uwp)"
+    },
+    "tiff",
+    "pybind11"
+  ]
 }
