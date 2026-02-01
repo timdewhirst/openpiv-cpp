@@ -5,6 +5,7 @@
 #include <iosfwd>
 
 // local
+#include "core/format_utils.h"
 #include "core/point.h"
 #include "core/size.h"
 
@@ -77,3 +78,8 @@ private:
 std::ostream& operator<<( std::ostream& os, const rect& r );
 
 }
+
+template <>
+struct std::formatter<openpiv::core::rect, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::rect> 
+{};

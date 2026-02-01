@@ -6,6 +6,9 @@
 #include <cstdint>
 #include <iosfwd>
 
+// openpiv
+#include "core/format_utils.h"
+
 namespace openpiv::core {
 
 /// basic 2D integer size i.e. (width, height)
@@ -85,3 +88,8 @@ size minimal_size( const size& s );
 size transpose( const size& s );
 
 }
+
+template <>
+struct std::formatter<openpiv::core::size, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::size> 
+{};

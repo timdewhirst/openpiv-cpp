@@ -6,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <format>
 #include <functional>
 #include <limits>
 #include <string>
@@ -15,12 +16,9 @@
 #include <unordered_map>
 #include <utility>
 
-
-// libs
-#include <fmt/core.h>
-
 // openpiv
 #include "core/enum_helper.h"
+#include "core/format_utils.h"
 
 namespace openpiv::core::logger {
 
@@ -43,29 +41,14 @@ namespace openpiv::core::logger {
             { Level::TEST,    "TEST"  },
     } )
 
-    template <
-        typename Rep,
-        typename Period>
-    static std::string to_string(const std::chrono::duration<Rep, Period>& td)
-    {
-        return std::to_string(td.count());
-    }
+}
 
-    template <
-        typename Clock,
-        typename Duration>
-    static std::string to_string(const std::chrono::time_point<Clock, Duration>& tp)
-    {
-        return std::to_string(tp.time_since_epoch().count());
-    }
+template <>
+struct std::formatter<openpiv::core::logger::Level, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::logger::Level> 
+{};
 
-    template <typename T>
-    static std::string to_string(const T& t)
-    {
-        std::ostringstream ss;
-        ss << t;
-        return ss.str();
-    }
+namespace openpiv::core::logger {
 
     /// core logging class; can register an arbitrary number
     /// of sinks, all of which will be called (ultimately)
@@ -100,29 +83,22 @@ namespace openpiv::core::logger {
         }
 
         template <typename... Ts>
-        size_t add(Level level, const std::string& fmt, Ts&&... args)
+        size_t add(Level level, std::string fmt, Ts&&... args)
         {
             if (stop)
                 return {};
 
-            auto now = std::chrono::high_resolution_clock::now();
+            auto now = std::chrono::utc_clock::now();
             auto tid = std::this_thread::get_id();
-            auto entry =
-                [level, now, tid, fmt, args=std::make_tuple(args...)]() mutable
-                {
-                    std::string output = fmt::format(
-                        "[{}] ({}) {}: ", // timestamp, threadid, level
-                        to_string(now),
-                        to_string(tid),
-                        to_string(level));
-                    std::apply(
-                        [&output, fmt](const Ts&... ts) {
-                            output += fmt::format(fmt, to_string(ts)...);
-                        },
-                        args);
 
-                    return std::make_tuple(level, output);
-                };
+            std::string log_entry = std::vformat(
+                "[{0:%F}Z{0:%T}] (tid: {1}) {2}: ",
+                std::make_format_args(
+                    now,
+                    tid,
+                    level)
+            );
+            log_entry += std::vformat(fmt, std::make_format_args(args...));
 
             // keep track of how many entries we've written
             ++entries_logged;
@@ -130,7 +106,7 @@ namespace openpiv::core::logger {
             // insert into queue
             {
                 std::unique_lock<std::mutex> lock(entry_mutex);
-                entries.emplace_back(std::move(entry));
+                entries.push_back(std::make_tuple(level, log_entry));
                 if (entries.size() > max_entries)
                     entries.pop_front();
             }
@@ -177,8 +153,7 @@ namespace openpiv::core::logger {
         }
 
     private:
-        using entry_return_t = std::tuple<Level, std::string>;
-        using entry_t = std::function<entry_return_t()>;
+        using entry_t = std::tuple<Level, std::string>;
         std::mutex entry_mutex;
         std::condition_variable entry_condition;
         std::deque<entry_t> entries;
@@ -221,7 +196,7 @@ namespace openpiv::core::logger {
                         // process/push to sinks
                         for (const auto& entry : local_entries)
                         {
-                            auto [level, log_line] = entry();
+                            auto [level, log_line] = entry;
                             for (auto& [id, sink] : sinks)
                                 sink(level, log_line);
                         }

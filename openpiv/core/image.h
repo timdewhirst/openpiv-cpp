@@ -12,6 +12,7 @@
 #include <vector>
 
 // local
+#include "core/format_utils.h"
 #include "core/image_expression.h"
 #include "core/image_type_traits.h"
 #include "core/pixel_types.h"
@@ -251,3 +252,8 @@ using rgba16_image = image< rgba_16 >;
 using cf_image     = image< c_f >;
 
 }
+
+template <typename T>
+struct std::formatter<openpiv::core::image<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::image<T>> 
+{};

@@ -304,7 +304,7 @@ int main( int argc, char* argv[] )
     const auto t2 = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::micro> total_us = t2 - t1;
     logger::info(
-        "processing time: {}us, {}us per interrogation area",
+        "processing time: {}, {} per interrogation area",
         total_us,
         total_us/found_peaks.size());
 

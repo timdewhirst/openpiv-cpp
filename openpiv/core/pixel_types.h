@@ -11,6 +11,9 @@
 #include <string_view>
 #include <type_traits>
 
+// core
+#include "core/format_utils.h"
+
 namespace openpiv::core {
 
 #pragma pack(push, 1)
@@ -482,3 +485,23 @@ constexpr std::string_view pixeltype_name()
 #pragma pack(pop)
 
 }
+
+template <typename T>
+struct std::formatter<openpiv::core::rgba<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::rgba<T>> 
+{};
+
+template <typename T>
+struct std::formatter<openpiv::core::yuva<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>> 
+{};
+
+template <typename T>
+struct std::formatter<openpiv::core::complex<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::complex<T>> 
+{};
+
+template <typename T>
+struct std::formatter<openpiv::core::g<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::g<T>> 
+{};

@@ -7,6 +7,7 @@
 #include <iostream>
 
 // local
+#include "core/format_utils.h"
 #include "core/util.h"
 
 namespace openpiv::core {
@@ -83,3 +84,9 @@ template < typename T >
 using point3 = point< 3, T >;
 
 }
+
+
+template <size_t N, typename T>
+struct std::formatter<openpiv::core::point<N, T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::point<N, T>> 
+{};

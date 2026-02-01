@@ -7,7 +7,7 @@ setup_vcpkg_before_project()
 
 project(openpiv-c++)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 
 set(openpiv-c++_VERSION_MAJOR 0)
 set(openpiv-c++_VERSION_MINOR 1)

@@ -9,6 +9,7 @@
 
 // local
 #include "core/exception_builder.h"
+#include "core/format_utils.h"
 #include "core/image.h"
 #include "core/log.h"
 #include "core/propagate_const.h"
@@ -285,3 +286,9 @@ namespace openpiv::core {
     using cf_image_view     = image_view< c_f >;
 
 }
+
+
+template <typename T>
+struct std::formatter<openpiv::core::image_view<T>, char> 
+    : openpiv::core::StreamableFormatter<openpiv::core::image_view<T>> 
+{};

@@ -294,7 +294,7 @@ TEST_CASE("image_utils_test - peak_find_test_with_offset")
 
     // find the peaks - in order
     auto peaks{ find_peaks( im, 3, 1 ) };
-    logger::sync_debug("image: {}", &im);
+    logger::sync_debug("image: {}", im);
     logger::sync_debug("peaks: {}", peaks);
     REQUIRE( peaks.size() == 3 );
     CHECK( peaks[0].rect().midpoint() == rect::point_t( ox + 50, oy + 50 ) );
