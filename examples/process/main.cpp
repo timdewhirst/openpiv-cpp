@@ -124,6 +124,13 @@ int main( int argc, char* argv[] )
         return 1;
     }
 
+    // check image count
+    if ( images.size() != 2 )
+    {
+        logger::error("must supply two images");
+        return 1;
+    }
+
     // check image sizes
     if ( images[0].size() != images[1].size() )
     {
@@ -304,9 +311,10 @@ int main( int argc, char* argv[] )
     const auto t2 = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::micro> total_us = t2 - t1;
     logger::info(
-        "processing time: {}, {} per interrogation area",
+        "processing time: {}, {}/ia, {}/ia/thread",
         total_us,
-        total_us/found_peaks.size());
+        total_us/found_peaks.size(),
+        (thread_count*total_us)/found_peaks.size());
 
     // dump output
     for ( const auto& pv : found_peaks )
