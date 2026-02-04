@@ -10,6 +10,7 @@
 
 // utils
 #include <cxxopts.hpp>
+#include "stats.hpp"
 #include "threadpool.hpp"
 
 #if defined(ASYNCPLUSPLUS)
@@ -153,6 +154,12 @@ int main( int argc, char* argv[] )
         core::point2<double> xy;
         core::vector2<double> vxy;
         double sn = 0.0;
+
+        // monitor execution times
+        std::chrono::duration<double, std::micro> extract_dt;
+        std::chrono::duration<double, std::micro> correlate_dt;
+        std::chrono::duration<double, std::micro> peaksearch_dt;
+        std::chrono::duration<double, std::micro> total_dt;
     };
     std::vector<point_vector> found_peaks( grid.size() );
 
@@ -195,12 +202,20 @@ int main( int argc, char* argv[] )
     // processing strategy
     auto processor = [&images, &found_peaks, correlator = std::move(correlator), limit_search]( size_t i, const core::rect& ia )
                      {
+                         point_vector result;
+
+                         const auto t0 = std::chrono::high_resolution_clock::now();
+
                          const auto view_a{ core::extract( images[0], ia ) };
                          const auto view_b{ core::extract( images[1], ia ) };
+                         const auto t1 = std::chrono::high_resolution_clock::now();
+                         result.extract_dt = t1 - t0;
 
                          // prepare & correlate
                          // output of correlation has lost positional information
                          const core::gf_image output{ correlator( view_a, view_b ) };
+                         const auto t2 = std::chrono::high_resolution_clock::now();
+                         result.correlate_dt = t2 - t1;
 
                          // find peaks
                          constexpr uint16_t num_peaks = 2;
@@ -216,6 +231,8 @@ int main( int argc, char* argv[] )
                          } else {
                              peaks = core::find_peaks( output, num_peaks, radius );
                          }
+                         const auto t3 = std::chrono::high_resolution_clock::now();
+                         result.peaksearch_dt = t3 - t2;
 
                          // sub-pixel fitting
                          if ( peaks.size() != num_peaks )
@@ -224,7 +241,6 @@ int main( int argc, char* argv[] )
                              return;
                          }
 
-                         point_vector result;
                          auto bl = ia.bottomLeft();
                          auto midpoint = ia.midpoint();
                          auto peak = peaks[0];
@@ -239,6 +255,9 @@ int main( int argc, char* argv[] )
                          // find s/n (or rather, highest to next highest peak)
                          if ( peaks[1][ {1, 1} ] > 0 )
                              result.sn = peaks[0][ {1, 1} ]/peaks[1][ {1, 1} ];
+
+                         const auto t4 = std::chrono::high_resolution_clock::now();
+                         result.total_dt = t4 - t0;
 
                          found_peaks[i] = std::move(result);
                      };
@@ -310,11 +329,27 @@ int main( int argc, char* argv[] )
 
     const auto t2 = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::micro> total_us = t2 - t1;
+
+    StatsMean extract_avg;
+    StatsMean correlate_avg;
+    StatsMean peaksearch_avg;
+    StatsMean total_avg;
+    for (const auto& peak : found_peaks)
+    {
+        extract_avg.add_observation(peak.extract_dt.count());
+        correlate_avg.add_observation(peak.correlate_dt.count());
+        peaksearch_avg.add_observation(peak.peaksearch_dt.count());
+        total_avg.add_observation(peak.total_dt.count());
+    }
+
     logger::info(
-        "processing time: {}, {}/ia, {}/ia/thread",
+        "processing time: {}, {}/ia, extract_avg: {}us, correlate_avg: {}us, peaksearch_avg: {}us, total_avg: {}us",
         total_us,
         total_us/found_peaks.size(),
-        (thread_count*total_us)/found_peaks.size());
+        extract_avg.value(),
+        correlate_avg.value(),
+        peaksearch_avg.value(),
+        total_avg.value());
 
     // dump output
     for ( const auto& pv : found_peaks )
