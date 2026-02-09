@@ -87,6 +87,5 @@ using point3 = point< 3, T >;
 
 
 template <size_t N, typename T>
-struct std::formatter<openpiv::core::point<N, T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::point<N, T>> 
+struct std::formatter<openpiv::core::point<N, T>> : openpiv::core::StreamableFormatter<openpiv::core::point<N, T>> 
 {};

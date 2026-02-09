@@ -487,21 +487,17 @@ constexpr std::string_view pixeltype_name()
 }
 
 template <typename T>
-struct std::formatter<openpiv::core::rgba<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::rgba<T>> 
+struct std::formatter<openpiv::core::rgba<T>> : openpiv::core::StreamableFormatter<openpiv::core::rgba<T>> 
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::yuva<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>> 
+struct std::formatter<openpiv::core::yuva<T>> : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>> 
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::complex<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::complex<T>> 
+struct std::formatter<openpiv::core::complex<T>> : openpiv::core::StreamableFormatter<openpiv::core::complex<T>> 
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::g<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::g<T>> 
+struct std::formatter<openpiv::core::g<T>> : openpiv::core::StreamableFormatter<openpiv::core::g<T>> 
 {};

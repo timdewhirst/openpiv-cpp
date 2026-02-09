@@ -90,6 +90,5 @@ size transpose( const size& s );
 }
 
 template <>
-struct std::formatter<openpiv::core::size, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::size> 
+struct std::formatter<openpiv::core::size> : openpiv::core::StreamableFormatter<openpiv::core::size> 
 {};

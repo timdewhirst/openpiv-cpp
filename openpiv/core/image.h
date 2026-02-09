@@ -254,6 +254,5 @@ using cf_image     = image< c_f >;
 }
 
 template <typename T>
-struct std::formatter<openpiv::core::image<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::image<T>> 
+struct std::formatter<openpiv::core::image<T>> : openpiv::core::StreamableFormatter<openpiv::core::image<T>> 
 {};

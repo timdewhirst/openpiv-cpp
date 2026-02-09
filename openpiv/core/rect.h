@@ -80,6 +80,5 @@ std::ostream& operator<<( std::ostream& os, const rect& r );
 }
 
 template <>
-struct std::formatter<openpiv::core::rect, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::rect> 
+struct std::formatter<openpiv::core::rect> : openpiv::core::StreamableFormatter<openpiv::core::rect> 
 {};

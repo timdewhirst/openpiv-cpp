@@ -289,6 +289,5 @@ namespace openpiv::core {
 
 
 template <typename T>
-struct std::formatter<openpiv::core::image_view<T>, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::image_view<T>> 
+struct std::formatter<openpiv::core::image_view<T>> : openpiv::core::StreamableFormatter<openpiv::core::image_view<T>> 
 {};
