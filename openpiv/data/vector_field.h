@@ -2,7 +2,11 @@
 #pragma once
 
 // std
+#include <array>
+#include <concepts>
 #include <deque>
+#include <type_traits>
+#include <utility>
 
 // openpiv
 #include "core/format_utils.h"
@@ -14,38 +18,11 @@
 
 namespace openpiv::data {
 
-    ///
-    template <
-        typename PointT, 
-        typename VectorT
-    >
-    class visitor
+    template <typename VisitorT, typename DataT>
+    concept VisitorC = requires(VisitorT v, const DataT& d)
     {
-    public:
-        virtual void visit(point_vector<PointT, VectorT>& visitable) = 0;
+        v.visit(d);
     };
-
-    /// 
-    template <typename PointT>
-    struct csv_output
-    template <
-        typename PointT, 
-        typename VectorT
-    >
-    class csv_visitor : public visitor<PointT, VectorT>
-    {
-    public:
-        csv_visitor(std::ostream& os) : _os(os) {}
-
-        void visit(point_vector<PointT, VectorT>& visitable) override
-        {
-            _os << 
-        }
-
-    private:
-        std::ostream& _os;
-    };
-
 
     ///
     template <
@@ -58,7 +35,11 @@ namespace openpiv::data {
         VectorT v {};
     };
 
-    /// 
+    ///
+    using point_vector_2d_2c = point_vector<core::point2<double>, core::vector2<double>>;
+    using point_vector_2d_3c = point_vector<core::point2<double>, core::vector3<double>>;
+
+    ///
     template <
         typename PointT,
         typename VectorT
@@ -66,6 +47,8 @@ namespace openpiv::data {
     class vector_field
     {
     public:
+        using data_t = point_vector<PointT, VectorT>;
+
         vector_field() = default;
         vector_field(const vector_field&) = default;
         vector_field(vector_field&&) = default;
@@ -76,17 +59,67 @@ namespace openpiv::data {
             : _data(sz)
         {}
 
-        void accept(visitor<PointT, VectorT>& v)
+        void add(data_t d) { _data.push_back(d); }
+        size_t size() const { return _data.size(); }
+
+        template <typename VisitorT>
+        requires VisitorC<VisitorT, data_t>
+        void accept(VisitorT& v)
         {
-            for (auto& d : _data)
+            for (const auto& d : _data)
                 v.visit(d);
         }
 
     private:
-        std::deque<point_vector> _data;
+        std::deque<point_vector<PointT, VectorT>> _data;
     };
 
     ///
-    using vector_field_2d_2c = vector_field<point2, vector2>;
-    using vector_field_2d_3c = vector_field<point2, vector3>;
+    using vector_field_2d_2c = vector_field<core::point2<double>, core::vector2<double>>;
+    using vector_field_2d_3c = vector_field<core::point2<double>, core::vector3<double>>;
+
+    template <
+        template <size_t, typename> typename T,
+        size_t N,
+        typename DataT>
+    concept DimensionedGeometryPrimitiveC = requires(T<N, DataT> t)
+    {
+        {t.data()} -> std::same_as<const std::array<DataT, N>&>;
+    };
+
+    template <
+        template <size_t, typename> typename T,
+        size_t N,
+        typename DataT>
+    requires DimensionedGeometryPrimitiveC<T, N, DataT>
+    std::ostream& csv_output(std::ostream& os, const T<N, DataT>& p)
+    {
+        bool first = true;
+        for (size_t i = 0; i < N; ++i) {
+            if (!first) os << ", ";
+            os << p[i];
+            first = false;
+        }
+        return os;
+    }
+
+    template <
+        typename PointT,
+        typename VectorT
+    >
+    class csv_visitor
+    {
+    public:
+        csv_visitor(std::ostream& os) : _os(os) {}
+
+        void visit(const point_vector<PointT, VectorT>& visitable)
+        {
+            csv_output(_os, visitable.p) << ", ";
+            csv_output(_os, visitable.v) << "\n";
+        }
+
+    private:
+        std::ostream& _os;
+    };
+
 }
