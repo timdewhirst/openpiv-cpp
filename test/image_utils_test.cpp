@@ -54,7 +54,7 @@ TEST_CASE("image_utils_test - generator_fill_test")
 
 TEST_CASE("image_utils_test - pnm_load_save_test")
 {
-    std::ifstream is("A_00001_a.tif", std::ios::binary);
+    std::ifstream is("A_00001_a.tiff", std::ios::binary);
     REQUIRE(is.is_open());
 
     std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };

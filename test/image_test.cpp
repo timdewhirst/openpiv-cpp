@@ -173,7 +173,7 @@ TEST_CASE("image_test - apply_test")
 
 TEST_CASE("image_test - scale_test")
 {
-    std::ifstream is("A_00001_a.tif", std::ios::binary);
+    std::ifstream is("A_00001_a.tiff", std::ios::binary);
     REQUIRE(is.is_open());
 
     std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };
