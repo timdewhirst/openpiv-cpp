@@ -6,6 +6,28 @@
 find_package(Catch2 REQUIRED)
 find_package(Threads REQUIRED)
 
+# ensure we make a test dir in build as a working directory
+set(TEST_WORKING_DIR "${CMAKE_BINARY_DIR}/test_working_dir")
+file(MAKE_DIRECTORY ${TEST_WORKING_DIR})
+
+function(create_copy_target TARGET_NAME SOURCE_FILES DEST_DIR)
+  file(GLOB FILES_TO_COPY ${SOURCE_FILES})
+  if(FILES_TO_COPY)
+    add_custom_target(${TARGET_NAME}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${FILES_TO_COPY}
+      "${DEST_DIR}/"
+      COMMENT "Copying test files to ${DEST_DIR}"
+      VERBATIM
+    )
+  endif()
+endfunction()
+create_copy_target(
+  copy_image_files
+  "${CMAKE_SOURCE_DIR}/test/*.tiff"
+  ${TEST_WORKING_DIR})
+
 file(GLOB SOURCES *_test.cpp)
 foreach(SOURCE ${SOURCES})
   get_filename_component(OUTPUT ${SOURCE} NAME_WE)
@@ -13,6 +35,7 @@ foreach(SOURCE ${SOURCES})
 
   # for each file, build a binary
   add_executable(${OUTPUT} ${SOURCE})
+  add_dependencies(${OUTPUT} copy_image_files)
 
   # include openpivcore
   include_directories(${CMAKE_SOURCE_DIR}/openpiv)
@@ -27,7 +50,7 @@ foreach(SOURCE ${SOURCES})
   add_test(
     NAME ${OUTPUT}
     COMMAND ${OUTPUT}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/test)
+    WORKING_DIRECTORY ${TEST_WORKING_DIR})
 endforeach()
 
 #
