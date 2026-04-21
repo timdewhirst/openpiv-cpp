@@ -22,10 +22,8 @@ if (BUILD_PYBIND)
       core/loader.cpp
     )
 
-    find_package(fmt CONFIG REQUIRED)
     target_link_libraries(
       pyopenpivcore
-      PRIVATE fmt::fmt-header-only
       PRIVATE openpivcore)
 
     if (UNIX AND APPLE)

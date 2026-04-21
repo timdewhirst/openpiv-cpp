@@ -38,9 +38,9 @@ namespace openpiv::algos {
         /// storage for intermediate data
         struct data_t
         {
-            cf_image output;
+            image_c_f output;
             std::vector< c_f > fft_buffer;
-            cf_image temp;
+            image_c_f temp;
         };
 
         /// helpers to allow TLS for intermediate storage
@@ -87,7 +87,7 @@ namespace openpiv::algos {
                    typename ContainedT,
                    typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
                    >
-        const cf_image& transform( const ImageT<ContainedT>& input, direction d = direction::FORWARD ) const
+        const image_c_f& transform( const ImageT<ContainedT>& input, direction d = direction::FORWARD ) const
         {
             DECLARE_ENTRY_EXIT
             if ( input.size() != size_ )
@@ -131,7 +131,7 @@ namespace openpiv::algos {
                        is_real_mono_pixeltype_v<ContainedT>
                        >
                    >
-        std::tuple<cf_image&, cf_image&>
+        std::tuple<image_c_f&, image_c_f&>
         transform_real( const ImageT<ContainedT>& a,
                         const ImageT<ContainedT>& b,
                         direction d = direction::FORWARD ) const
@@ -243,8 +243,8 @@ namespace openpiv::algos {
         cross_correlate( const ImageT<ContainedT>& a,
                          const ImageT<ContainedT>& b ) const
         {
-            cf_image a_fft{ transform( a, direction::FORWARD ) };
-            cf_image b_fft{ transform( b, direction::FORWARD ) };
+            image_c_f a_fft{ transform( a, direction::FORWARD ) };
+            image_c_f b_fft{ transform( b, direction::FORWARD ) };
 
             a_fft = b_fft * conj( a_fft );
             OutT output{ real( transform( a_fft, direction::REVERSE ) ) };
@@ -278,9 +278,9 @@ namespace openpiv::algos {
                    typename ContainedT,
                    typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
                    >
-        const cf_image& auto_correlate( const ImageT<ContainedT>& a ) const
+        const image_c_f& auto_correlate( const ImageT<ContainedT>& a ) const
         {
-            cf_image a_fft{ transform( a, direction::FORWARD ) };
+            image_c_f a_fft{ transform( a, direction::FORWARD ) };
 
             a_fft = abs_sqr( a_fft );
             cache().output = real( transform( a_fft, direction::REVERSE ) );

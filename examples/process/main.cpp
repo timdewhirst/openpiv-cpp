@@ -164,28 +164,28 @@ int main( int argc, char* argv[] )
     std::vector<point_vector> found_peaks( grid.size() );
 
     // wrap correlators
-    using correlator_t = std::function<core::gf_image(const core::gf_image&, const core::gf_image&)>;
+    using correlator_t = std::function<core::image_g_f(const core::image_g_f&, const core::image_g_f&)>;
     std::unordered_map<std::string, correlator_t> correlators = {
         {"complex",
-         [ia](const core::gf_image& im_a, const core::gf_image& im_b) -> core::gf_image
+         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
              {
                  static algos::FFT fft{ ia };
                  return fft.cross_correlate(im_a, im_b);
              } },
         {"real",
-         [ia](const core::gf_image& im_a, const core::gf_image& im_b) -> core::gf_image
+         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
              {
                  static algos::FFT fft{ ia };
                  return fft.cross_correlate_real(im_a, im_b);
              } },
         {"pocket",
-         [ia](const core::gf_image& im_a, const core::gf_image& im_b) -> core::gf_image
+         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
              {
                  static algos::PocketFFT fft{ ia };
                  return fft.cross_correlate(im_a, im_b);
              } },
         {"pocket_real",
-         [ia](const core::gf_image& im_a, const core::gf_image& im_b) -> core::gf_image
+         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
              {
                  static algos::PocketFFT fft{ ia };
                  return fft.cross_correlate_real(im_a, im_b);
@@ -213,7 +213,7 @@ int main( int argc, char* argv[] )
 
                          // prepare & correlate
                          // output of correlation has lost positional information
-                         const core::gf_image output{ correlator( view_a, view_b ) };
+                         const core::image_g_f output{ correlator( view_a, view_b ) };
                          const auto t2 = std::chrono::high_resolution_clock::now();
                          result.correlate_dt = t2 - t1;
 

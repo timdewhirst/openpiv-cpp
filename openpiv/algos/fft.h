@@ -214,14 +214,9 @@ namespace openpiv::algos {
                        is_real_mono_pixeltype_v<ContainedT>
                        >
                    >
-<<<<<<< HEAD
         OutT
         cross_correlate_real( const ImageT<ContainedT>& a,
                               const ImageT<ContainedT>& b ) const
-=======
-        const image_c_f& cross_correlate_real( const ImageT<ContainedT>& a,
-                                              const ImageT<ContainedT>& b ) const
->>>>>>> 79158f4 (change image aliases to match pixel type aliases)
         {
             auto [a_fft, b_fft] = transform_real( a, b, direction::FORWARD );
             a_fft = b_fft * conj( a_fft );

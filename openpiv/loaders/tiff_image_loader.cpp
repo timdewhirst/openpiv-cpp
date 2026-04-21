@@ -203,8 +203,8 @@ namespace openpiv::core {
                 width, height,
                 bps,
                 spp,
-                format,
-                planar,
+                to_string(format),
+                to_string(planar),
                 num_images);
 
             // ... and reset current directory

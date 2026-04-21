@@ -33,7 +33,7 @@ void add_loader(py::module& m)
                    core::exception_builder<std::runtime_error>() << "failed to open " << filename;
 
                // find loader
-               auto loader{ core::image_loader_registry::find(is) };
+               auto loader{ core::image_loader_registry::instance().find(is) };
                if ( !loader )
                    core::exception_builder<std::runtime_error>() << "failed to find loader for " << filename;
 

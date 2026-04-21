@@ -9,6 +9,9 @@
 #include <type_traits>
 #include <vector>
 
+// core
+#include "core/format_utils.h"
+
 /// EnumHelper provides a standard way to produce string representations
 /// of enumerations. The enum mapping is not particularly efficient being
 /// done at initialization time (rather than compile time) however is
@@ -82,3 +85,4 @@ template <typename E,
     {                                                                   \
         return os << to_string(e);                                      \
     }
+
