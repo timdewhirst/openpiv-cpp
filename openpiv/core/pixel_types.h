@@ -264,7 +264,6 @@ std::ostream& operator<<(std::ostream& os, const complex<T>& v )
 }
 
 
-#pragma warning(disable: 4244) // conversion from U to T, possible loss of data
 // greyscale
 template < typename T >
 struct g
@@ -290,7 +289,6 @@ struct g
 
     T v{};
 };
-#pragma warning(default: 4244)
 
 // greyscale
 using g_8  = g<uint8_t>;
@@ -502,17 +500,17 @@ constexpr std::string_view pixeltype_name()
 }
 
 template <typename T>
-struct std::formatter<openpiv::core::rgba<T>> : openpiv::core::StreamableFormatter<openpiv::core::rgba<T>> 
+struct std::formatter<openpiv::core::rgba<T>> : openpiv::core::StreamableFormatter<openpiv::core::rgba<T>>
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::yuva<T>> : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>> 
+struct std::formatter<openpiv::core::yuva<T>> : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>>
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::complex<T>> : openpiv::core::StreamableFormatter<openpiv::core::complex<T>> 
+struct std::formatter<openpiv::core::complex<T>> : openpiv::core::StreamableFormatter<openpiv::core::complex<T>>
 {};
 
 template <typename T>
-struct std::formatter<openpiv::core::g<T>> : openpiv::core::StreamableFormatter<openpiv::core::g<T>> 
+struct std::formatter<openpiv::core::g<T>> : openpiv::core::StreamableFormatter<openpiv::core::g<T>>
 {};
