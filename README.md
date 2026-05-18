@@ -1,9 +1,9 @@
-![Build Status](https://github.com/OpenPIV/openpiv-c--qt/actions/workflows/cmake.yml/badge.svg)
+![Build Status](https://github.com/timdewhirst/openpiv-cpp/actions/workflows/cmake.yml/badge.svg)
 
 # OpenPIV (c++)
 
 An implementation of a PIV analysis engine in C++ using as few dependencies as possible;
-the implementation requires a c++17 compliant compiler.
+the implementation requires a c++23 compliant compiler.
 
 ## Build
 
@@ -11,8 +11,7 @@ There are some external dependencies under external/, so when cloning use:
 
 ```git clone --recursive <path to git repo>```
 
-Building uses cmake and vcpkg, and is simplified by using a vcpkg manifest to specify
-the dependent packages. Vcpkg has some pre-requisites:
+Building uses cmake; pre-requisites are:
 
 * a compiler (e.g. `apt install build-essentials`)
 * cmake
@@ -45,13 +44,9 @@ The binaries are located in the build directory:
 
 ### Python Bindings
 
-Python bindings are made through pybind11. Building python modules appears to be a non-trivial
-subject, however as openpivcore is based on vcpkg and cmake, a setup.py is provided to
+Python bindings are made through pybind11. Building python modules
+appears to be a non-trivial subject, however a setup.py is provided to
 build the core library as well as the python bindings using cmake.
-
-Although vcpkg provides pybind11, this is not used as it has a dependency on vcpkg's python; the
-aim is to allow the python bindings to work with the user's installed version of python. As such,
-the supplied `pyproject.toml` specifies pybind11 as a required dependency.
 
 To build using pip/setuptools:
 
@@ -64,28 +59,15 @@ To build using cmake:
 
 * install pybind11 using pip
 * install pytest using pip
-* specify the location of the installed pybind11 libs/cmake modules using `-DCMAKE_PREFIX_PATH=<path to pybind11>`
-  * you can use pip & sed to find this: `pip show pybind11 | sed -n '/^Location/ s/.* \(.*\)/\1/ p'`
+* specify the location of the installed pybind11 libs/cmake modules
+  using `-Dpybind11_ROOT=$(pybind11-config --cmakedir)`
 * specify that the python bindings should be built: `-DBUILD_PYBIND=ON`
 
 e.g.
 
 ```
-cmake -B build -S . -DBUILD_PYBIND=ON -DCMAKE_PREFIX_PATH=$(pip show pybind11 | sed -n '/^Location/ s/.* \(.*\)/\1/ p')
+cmake -B build -S . -DBUILD_PYBIND=ON -Dpybind11_ROOT=$(pybind11-config --cmakedir)
 ```
-
-## Dependencies
-
-These are captured in `vcpkg.json`:
-
-* c++17 compiler e.g. clang++-5.0, gcc7
-* [vcpkg](https://github.com/Microsoft/vcpkg)
-  * catch2: unit test framework
-  * libtiff: TIFF IO support
-  * benchmark: used to run performance benchmarks
-  * async++ (optional): implements c++17 parallel algorithms
-  * cxxopts: nice command line parsing
-  * pybind11
 
 ## Examples
 
