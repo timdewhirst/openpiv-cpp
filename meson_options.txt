@@ -1,0 +1,2 @@
+option('build_examples', type: 'boolean', value: true, description: 'Build examples')
+option('build_pybind', type: 'boolean', value: false, description: 'Build Python bindings')
