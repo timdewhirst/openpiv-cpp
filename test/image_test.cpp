@@ -181,6 +181,7 @@ TEST_CASE("image_test - scale_test")
 
     image_g_16 im;
     loader->load( is, im );
+    is.close();
 
     // scale
     g_16 min, max;
@@ -198,7 +199,7 @@ TEST_CASE("image_test - scale_test")
     REQUIRE(!!writer);
     REQUIRE(writer->name() == "image/x-portable-anymap");
 
-    std::fstream os( "A_00001_a.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
+    std::fstream os( "A_00001_a.image_test.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
     writer->save( os, im );
 }
 

@@ -67,12 +67,12 @@ TEST_CASE("image_utils_test - pnm_load_save_test")
     // write data
     std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
     {
-        std::fstream os( "A_00001_a.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
+        std::fstream os( "A_00001_a.image_utils_test.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
         writer->save( os, im );
     }
 
     // re-read data, from PNM
-    is = std::ifstream("A_00001_a.pgm", std::ios::binary);
+    is = std::ifstream("A_00001_a.image_utils_test.pgm", std::ios::binary);
     REQUIRE(is.is_open());
 
     loader = image_loader_registry::instance().find(is);
@@ -83,9 +83,8 @@ TEST_CASE("image_utils_test - pnm_load_save_test")
     is.close();
 
     {
-        std::ofstream os( "reloaded.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
+        std::ofstream os( "reloaded.image_utils_test.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
         writer->save( os, reloaded );
-        os.close();
     }
 
     // and check the two images are equal
@@ -151,7 +150,6 @@ TEST_CASE("image_utils_test - rgba_join_test")
     std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
     std::fstream os( "test-rgbjoin.ppm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
     writer->save( os, rgba );
-    os.close();
 }
 
 TEST_CASE("image_utils_test - simple_transpose_test")
