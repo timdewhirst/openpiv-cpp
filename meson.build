@@ -5,6 +5,18 @@ project('openpiv-cpp', 'cpp',
 # Options
 build_examples = get_option('build_examples')
 build_pybind = get_option('build_pybind')
+ubsan = get_option('ubsan')
+asan = get_option('asan')
+
+if ubsan
+  add_project_arguments('-fsanitize=undefined', language: 'cpp')
+  add_project_link_arguments('-fsanitize=undefined', language: 'cpp')
+endif
+
+if asan
+  add_project_arguments('-fsanitize=address', language: 'cpp')
+  add_project_link_arguments('-fsanitize=address', language: 'cpp')
+endif
 
 # dependencies
 threads_dep = dependency('threads')
