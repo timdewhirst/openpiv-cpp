@@ -2,6 +2,11 @@ project('openpiv-cpp', 'cpp',
   version: '0.1.0',
   default_options: ['cpp_std=c++23'])
 
+# build specific options
+if get_option('buildtype') == 'release'
+  add_project_arguments('-ffast-math', language: 'cpp')
+endif
+
 # Options
 build_examples = get_option('build_examples')
 build_pybind = get_option('build_pybind')
