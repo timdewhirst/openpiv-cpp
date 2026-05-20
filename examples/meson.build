@@ -1,16 +1,14 @@
 # Examples directory
-# PocketFFT include path
-pocketfft_inc = include_directories('../external/pocketfft')
 
 # Process example
 process_src = files('process/main.cpp')
   executable('process',
     sources: process_src,
     include_directories: [
-      include_directories('../openpiv'),
-      pocketfft_inc,
+      include_directories('../openpiv')
     ],
     dependencies: [
+      pocketfft_dep,
       openpiv_dep,
       cxxopts_dep,
       threads_dep,
@@ -25,6 +23,7 @@ process_src = files('process/main.cpp')
       include_directories('../openpiv'),
     ],
     dependencies: [
+      pocketfft_dep,
       openpiv_dep,
       cxxopts_dep,
       threads_dep,
