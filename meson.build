@@ -1,6 +1,9 @@
-project('openpiv-cpp', 'cpp',
+project(
+  'openpiv-cpp',
+  'cpp',
   version: '0.1.0',
-  default_options: ['cpp_std=c++23'])
+  default_options: ['cpp_std=c++23']
+)
 
 # build specific options
 if get_option('buildtype') == 'release'
@@ -29,6 +32,7 @@ tiff_dep = dependency('libtiff-4')
 catch2_dep = dependency('catch2-with-main')
 benchmark_dep = dependency('benchmark_main')
 cxxopts_dep = dependency('cxxopts')
+pocketfft_dep = dependency('pocketfft')
 
 # Subdirectories
 subdir('openpiv')

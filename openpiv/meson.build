@@ -7,9 +7,6 @@ openpiv_sources = files(
   'loaders/pnm_image_loader.cpp',
 )
 
-# PocketFFT (header-only, local)
-pocketfft_inc = include_directories('../external/pocketfft')
-
 # TIFF (local fallback + system libtiff)
 tiff_inc = include_directories('../external/libtiff/4.0.10')
 
@@ -24,11 +21,13 @@ libopenpiv = static_library('openpivcore',
   sources: openpiv_sources + tiff_sources,
   include_directories: [
     include_directories('.'),
-    pocketfft_inc,
     tiff_inc,
   ],
   cpp_args: ['-D_USE_MATH_DEFINES'],
-  dependencies: [threads_dep, tiff_dep],
+  dependencies: [
+    pocketfft_dep,
+    threads_dep,
+    tiff_dep],
   install: false,
 )
 

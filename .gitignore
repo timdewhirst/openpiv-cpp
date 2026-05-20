@@ -11,4 +11,4 @@ TAGS
 .idea/
 build/
 subprojects/**/
-!subprojecs/*.wrap
+!subprojects/*.wrap
