@@ -100,6 +100,7 @@ int main( int argc, char* argv[] )
     logger::info("overlap: {}", overlap);
     logger::info("input files: {}", core::join(input_files, ", "));
     logger::info("execution: {}", execution);
+    logger::info("thread count: {}", thread_count);
 
     // get images
     std::vector<core::image_g_f> images;
