@@ -1,10 +1,11 @@
 # Python bindings using pybind11
-pybind_option = option('build_pybind', type: 'boolean', value: false, description: 'Build Python bindings')
+pybind_option = get_option('build_pybind')
 
-if pybind_option.enabled()
+if pybind_option
   py_mod = import('python')
 
   # Check for pybind11
+  python_dep = dependency('python')
   pybind11_dep = dependency('pybind11')
   if not pybind11_dep.found()
     error('pybind11 not found. Install with: pip install pybind11')
@@ -23,20 +24,20 @@ if pybind_option.enabled()
     'core/vector.cpp',
   )
 
-  pybind_mod = shared_library('pyopenpivcore',
+  ext_suffix = run_command('python3-config', '--extension-suffix', check: true).stdout().strip().replace('.so', '')
+  pybind_mod = shared_library('pyopenpivcore' + ext_suffix,
     sources: py_sources,
     include_directories: [
       include_directories('../openpiv'),
     ],
     dependencies: [
       openpiv_dep,
+      python_dep,
       pybind11_dep,
     ],
     cpp_args: ['-D_USE_MATH_DEFINES'],
+    link_args: ['-lpython3.14'],
+    name_prefix: '',
     install: true,
-    install_dir: py_mod.get_install_dir(),
   )
-
-  # Rename for Python (remove lib prefix, add .so/.pyd extension)
-  pybind_mod_name = 'pyopenpivcore' + py_mod.ext_suffix
 endif
