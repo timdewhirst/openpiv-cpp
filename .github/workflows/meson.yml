@@ -20,6 +20,12 @@ jobs:
 
     - name: Install Meson
       run: pip install meson
+      
+    - name: Set up GCC
+      uses: egor-tensin/setup-gcc@v2
+      with:
+        version: 15
+        platform: x64
 
     - name: Install Ninja
       run: |
