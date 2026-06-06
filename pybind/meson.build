@@ -25,6 +25,7 @@ if pybind_option
   )
 
   ext_suffix = run_command('python3-config', '--extension-suffix', check: true).stdout().strip().replace('.so', '')
+  py_lib_name = run_command('python3', '-c', 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")', check: true).stdout().strip()
   pybind_mod = shared_library('pyopenpivcore' + ext_suffix,
     sources: py_sources,
     include_directories: [
@@ -36,7 +37,7 @@ if pybind_option
       pybind11_dep,
     ],
     cpp_args: ['-D_USE_MATH_DEFINES'],
-    link_args: ['-lpython3.14'],
+    link_args: ['-l' + py_lib_name],
     name_prefix: '',
     install: true,
   )
