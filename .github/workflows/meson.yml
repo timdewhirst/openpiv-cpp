@@ -1,0 +1,41 @@
+name: Meson
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Meson
+      run: pip install meson
+
+    - name: Install Ninja
+      run: |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt-get update && sudo apt-get install -y ninja-build
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          brew install ninja
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+          choco install ninja
+        fi
+
+    - name: Configure
+      run: meson setup build -Dbuildtype=release
+
+    - name: Build
+      run: meson compile -C build
+
+    - name: Test
+      run: meson test -C build
