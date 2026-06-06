@@ -1,4 +1,4 @@
-![Build Status](https://github.com/timdewhirst/openpiv-cpp/actions/workflows/cmake.yml/badge.svg)
+![Build Status](https://github.com/timdewhirst/openpiv-cpp/actions/workflows/meson.yml/badge.svg)
 
 # OpenPIV (c++)
 
