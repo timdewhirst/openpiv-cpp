@@ -1,7 +1,7 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
 
 // std
 #include <fstream>
@@ -15,7 +15,6 @@
 // to be tested
 #include "data/vector_field.h"
 
-using namespace Catch;
 using namespace openpiv::core;
 using namespace openpiv::data;
 

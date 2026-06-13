@@ -1,6 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <fstream>
@@ -23,7 +25,6 @@
 #include "loaders/image_loader.h"
 #include "algos/stats.h"
 
-using namespace Catch;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 namespace logger = openpiv::core::logger;

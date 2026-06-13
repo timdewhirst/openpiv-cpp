@@ -1,6 +1,7 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
+// doctest
+#include <doctest.h>
 
 // std
 #include <algorithm>
@@ -32,7 +33,7 @@ TEST_CASE("grid_test - cartesian grid")
     size interrogation{ 32, 32 };
     std::vector<rect> expected;
 
-    SECTION("margin")
+    SUBCASE("margin")
     {
         auto generated = generate_cartesian_grid( {100, 50}, interrogation, 0.5 );
 
@@ -41,26 +42,26 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(2, 17), point_t(18, 17), point_t(34, 17), point_t(50, 17), point_t(66, 17) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 1x1")
+    SUBCASE("exact 1x1")
     {
         auto generated = generate_cartesian_grid( {32, 32}, interrogation, 0.5 );
         expected.emplace_back( rect({0, 0}, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 3x3")
+    SUBCASE("exact 3x3")
     {
         auto generated = generate_cartesian_grid( {64, 64}, interrogation, 0.5 );
 
@@ -70,14 +71,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(0, 32),  point_t(16, 32), point_t(32, 32) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 5x5")
+    SUBCASE("exact 5x5")
     {
         auto generated = generate_cartesian_grid( {64, 64}, interrogation, 0.25 );
 
@@ -89,14 +90,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(0, 32),  point_t(8, 32),  point_t(16, 32),  point_t(24, 32), point_t(32, 32) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("3x3, 1 margin")
+    SUBCASE("3x3, 1 margin")
     {
         auto generated = generate_cartesian_grid( {65, 65}, interrogation, 0.5 );
 
@@ -106,14 +107,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(0, 32),  point_t(16, 32), point_t(32, 32) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("3x3, 2 margin")
+    SUBCASE("3x3, 2 margin")
     {
         auto generated = generate_cartesian_grid( {66, 66}, interrogation, 0.5 );
 
@@ -123,14 +124,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(1, 33),  point_t(17, 33), point_t(33, 33) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 3x3, 50% pixel offset")
+    SUBCASE("exact 3x3, 50% pixel offset")
     {
         auto generated = generate_cartesian_grid( {64, 64}, interrogation, {16, 16} );
 
@@ -140,14 +141,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(0, 32),  point_t(16, 32), point_t(32, 32) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 3x5, 50/25% pixel offset")
+    SUBCASE("exact 3x5, 50/25% pixel offset")
     {
         auto generated = generate_cartesian_grid( {64, 64}, interrogation, {16, 8} );
 
@@ -159,14 +160,14 @@ TEST_CASE("grid_test - cartesian grid")
                     point_t(0, 32),  point_t(16, 32), point_t(32, 32) } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );
     }
 
-    SECTION("exact 3x7, 50/50% pixel offset, non-square interrogation")
+    SUBCASE("exact 3x7, 50/50% pixel offset, non-square interrogation")
     {
         auto interrogation = size(32, 16);
         auto generated = generate_cartesian_grid(
@@ -186,8 +187,8 @@ TEST_CASE("grid_test - cartesian grid")
                   } )
             expected.emplace_back( rect(tl, interrogation) );
 
-        INFO( "generated: " << sort_grid(generated) );
-        INFO( "expected:  " << sort_grid(expected) );
+        MESSAGE( "generated: " << sort_grid(generated) );
+        MESSAGE( "expected:  " << sort_grid(expected) );
 
         CHECK( generated.size() == expected.size() );
         CHECK( (sort_grid( generated ) == sort_grid( expected )) );

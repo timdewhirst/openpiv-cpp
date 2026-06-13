@@ -1,7 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <thread>
@@ -15,8 +16,6 @@
 #include "core/image_utils.h"
 
 using namespace std::string_literals;
-using namespace Catch;
-using namespace Catch::Matchers;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 
@@ -52,7 +51,7 @@ TEST_CASE("image_algos_test - FFTTest")
             else
             {
                 auto p = point2<uint32_t>{ x, y };
-                REQUIRE_THAT( (output[ p ].abs_sqr()), WithinAbs(0, 1e-9) );
+                REQUIRE( doctest::matchers::WithinAbs(output[ p ].abs_sqr(), 0, 1e-9) );
             }
 
     // inverse transform
@@ -99,7 +98,7 @@ TEST_CASE("image_algos_test - FFT two real images")
                     }
                     else
                     {
-                        REQUIRE_THAT( (im[ p ].abs_sqr()), WithinAbs(0, 1e-9) );
+                        REQUIRE( doctest::matchers::WithinAbs(im[ p ].abs_sqr(), 0, 1e-9) );
                     }
                 }
         };
@@ -116,17 +115,17 @@ TEST_CASE("image_algos_test - FFT Different Size")
     FFT fft( { 512, 512 } );
     _REQUIRE_THROWS_MATCHES( fft.transform( im ),
                              std::runtime_error,
-                             ContainsSubstring( "image size is different"s, CaseSensitive::No ) );
+                             ContainsSubstring( "image size is different" , CaseSensitive::No ) );
 }
 
 TEST_CASE("image_algos_test - FFT non-power-of-two size")
 {
     _REQUIRE_THROWS_MATCHES( FFT( { 512, 400 } ),
                              std::runtime_error,
-                             ContainsSubstring( "power of 2"s, CaseSensitive::No ) );
+                             ContainsSubstring( "power of 2" , CaseSensitive::No ) );
     _REQUIRE_THROWS_MATCHES( FFT( { 400, 512 } ),
                              std::runtime_error,
-                             ContainsSubstring( "power of 2"s, CaseSensitive::No ) );
+                             ContainsSubstring( "power of 2" , CaseSensitive::No ) );
 }
 
 TEST_CASE("image_algos_test - cross_correlation_test")

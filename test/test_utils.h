@@ -59,19 +59,3 @@ create_and_fill( const size& s, T v )
 
     return std::make_tuple( result, v );
 }
-
-#define _REQUIRE_THROWS_MATCHES( p, ExceptionT, matcher )               \
-    {                                                                   \
-        bool caught{false};                                             \
-        try {                                                           \
-            p;                                                          \
-        }                                                               \
-        catch(ExceptionT& e)                                            \
-        {                                                               \
-            std::string what = e.what();                                \
-            caught = matcher.match( what );                             \
-        }                                                               \
-        catch(...)                                                      \
-        {}                                                              \
-        REQUIRE(caught);                                                \
-    }

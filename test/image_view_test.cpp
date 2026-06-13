@@ -1,7 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <sstream>
@@ -17,8 +18,6 @@
 #include "algos/stats.h"
 
 using namespace std::string_literals;
-using namespace Catch;
-using namespace Catch::Matchers;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 namespace logger = openpiv::core::logger;
@@ -71,7 +70,7 @@ TEST_CASE("image_view_test - resize_failure_test")
     _REQUIRE_THROWS_MATCHES(
         iv.resize(300, 300),
         std::out_of_range,
-        ContainsSubstring( "not contained within image"s, CaseSensitive::No ) );
+        ContainsSubstring( "not contained within image" , CaseSensitive::No ) );
 }
 
 TEST_CASE("image_view_test - copy_test")
@@ -246,7 +245,7 @@ TEST_CASE("image_view_test - out_of_bounds_test")
             im,
             rect::from_size({250, 250}) ),
         std::out_of_range,
-        ContainsSubstring( "not contained within image"s, CaseSensitive::No ) );
+        ContainsSubstring( "not contained within image" , CaseSensitive::No ) );
 }
 
 TEST_CASE("image_view_test - convertion_test")

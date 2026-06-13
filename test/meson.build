@@ -48,7 +48,7 @@ foreach i : range(test_sources.length())
     ],
     dependencies: [
       openpiv_dep,
-      catch2_dep,
+      doctest_dep,
       threads_dep
     ],
   )

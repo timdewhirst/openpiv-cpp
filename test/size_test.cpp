@@ -1,7 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <stdexcept>
@@ -15,8 +16,6 @@
 #include "test_utils.h"
 
 using namespace std::string_literals;
-using namespace Catch;
-using namespace Catch::Matchers;
 using namespace openpiv::core;
 
 TEST_CASE("size_test - default_test")
@@ -94,7 +93,7 @@ TEST_CASE("size_test - subtract_test")
 
     _REQUIRE_THROWS_MATCHES( s1 -= s2,
                              std::out_of_range,
-                             ContainsSubstring( "sizes cannot be negative"s, CaseSensitive::No ) );
+                             ContainsSubstring( "sizes cannot be negative" , CaseSensitive::No ) );
 }
 
 TEST_CASE("size_test - maximal_test")

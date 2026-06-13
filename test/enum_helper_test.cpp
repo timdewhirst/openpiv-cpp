@@ -1,6 +1,7 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
+// doctest
+#include <doctest.h>
 
 // std
 #include <sstream>
@@ -12,7 +13,6 @@
 // to be tested
 #include "core/enum_helper.h"
 
-using namespace Catch;
 using namespace openpiv::core;
 
 enum class E {

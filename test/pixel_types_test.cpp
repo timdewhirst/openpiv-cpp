@@ -1,6 +1,7 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
+// doctest
+#include <doctest.h>
 
 // std
 #include <sstream>
@@ -60,7 +61,7 @@ TEST_CASE("pixel_types_test - is_real_mono_pixel_type_test")
 
 TEST_CASE("pixel_types_test - pixel_conversion_test")
 {
-    SECTION( "self" )
+    SUBCASE( "self" )
     {
         REQUIRE( (pixeltype_is_convertible_v< g_f, g_f >) );
         REQUIRE( (pixeltype_is_convertible_v< g_8, g_8 >) );
@@ -76,7 +77,7 @@ TEST_CASE("pixel_types_test - pixel_conversion_test")
         REQUIRE( (pixeltype_is_convertible_v< rgba_32, rgba_32 >) );
     }
 
-    SECTION( "convertion" )
+    SUBCASE( "convertion" )
     {
         REQUIRE( (pixeltype_is_convertible_v< rgba<double>, g<double> >) );
         REQUIRE( (pixeltype_is_convertible_v< g<double>, rgba<double> >) );
@@ -154,7 +155,7 @@ TEST_CASE("pixel_types_test - complex_to_greyscale_test")
 
 TEST_CASE("pixel_types_test - rgba")
 {
-    SECTION("default constructor")
+    SUBCASE("default constructor")
     {
         auto p = rgba_8();
         REQUIRE(std::is_same_v<rgba_8::value_t, uint8_t>);
@@ -164,7 +165,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p.a == rgba_8::value_t{});
     }
 
-    SECTION("constructor from value")
+    SUBCASE("constructor from value")
     {
         auto p = rgba_8(128);
         CHECK(p.r == 128);
@@ -173,7 +174,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p.a == std::numeric_limits<rgba_8::value_t>::max());
     }
 
-    SECTION("assignment from value")
+    SUBCASE("assignment from value")
     {
         rgba_8 p;
         p = 128;
@@ -183,7 +184,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p.a == std::numeric_limits<rgba_8::value_t>::max());
     }
 
-    SECTION("constructor from values")
+    SUBCASE("constructor from values")
     {
         auto p = rgba_8(127, 128, 129, 130);
         CHECK(p.r == 127);
@@ -192,7 +193,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p.a == 130);
     }
 
-    SECTION("comparison operators")
+    SUBCASE("comparison operators")
     {
         auto p1 = rgba_8(127, 128, 129, 130);
         auto p2 = rgba_8(127, 128, 129, 131);
@@ -201,7 +202,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p1 == p2);
     }
 
-    SECTION("defaulted constructors")
+    SUBCASE("defaulted constructors")
     {
         auto p = rgba_8(1, 2, 3, 4);
         auto p_copy{ p };
@@ -215,7 +216,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("defaulted assignments")
+    SUBCASE("defaulted assignments")
     {
         auto p = rgba_8(1, 2, 3, 4);
         rgba_8 p_copy;
@@ -231,7 +232,7 @@ TEST_CASE("pixel_types_test - rgba")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("ostream")
+    SUBCASE("ostream")
     {
         auto p = rgba_8(1, 2, 3, 4);
         std::ostringstream ss;
@@ -242,7 +243,7 @@ TEST_CASE("pixel_types_test - rgba")
 
 TEST_CASE("pixel_types_test - yuva")
 {
-    SECTION("default constructor")
+    SUBCASE("default constructor")
     {
         auto p = yuva_8();
         REQUIRE(std::is_same_v<yuva_8::value_t, uint8_t>);
@@ -252,7 +253,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p.a == yuva_8::value_t{});
     }
 
-    SECTION("constructor from value")
+    SUBCASE("constructor from value")
     {
         auto p = yuva_8(128);
         CHECK(p.y == 128);
@@ -261,7 +262,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p.a == std::numeric_limits<yuva_8::value_t>::max());
     }
 
-    SECTION("assignment from value")
+    SUBCASE("assignment from value")
     {
         yuva_8 p;
         p = 128;
@@ -271,7 +272,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p.a == std::numeric_limits<yuva_8::value_t>::max());
     }
 
-    SECTION("constructor from values")
+    SUBCASE("constructor from values")
     {
         auto p = yuva_8(127, 128, 129, 130);
         CHECK(p.y == 127);
@@ -280,7 +281,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p.a == 130);
     }
 
-    SECTION("comparison operators")
+    SUBCASE("comparison operators")
     {
         auto p1 = yuva_8(127, 128, 129, 130);
         auto p2 = yuva_8(127, 128, 129, 131);
@@ -289,7 +290,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p1 == p2);
     }
 
-    SECTION("defaulted constructors")
+    SUBCASE("defaulted constructors")
     {
         auto p = yuva_8(1, 2, 3, 4);
         auto p_copy{ p };
@@ -303,7 +304,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("defaulted assignments")
+    SUBCASE("defaulted assignments")
     {
         auto p = yuva_8(1, 2, 3, 4);
         yuva_8 p_copy;
@@ -319,7 +320,7 @@ TEST_CASE("pixel_types_test - yuva")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("ostream")
+    SUBCASE("ostream")
     {
         auto p = yuva_8(1, 2, 3, 4);
         std::ostringstream ss;
@@ -330,33 +331,33 @@ TEST_CASE("pixel_types_test - yuva")
 
 TEST_CASE("pixel_types_test - g")
 {
-    SECTION("default constructor")
+    SUBCASE("default constructor")
     {
         auto p = g_8();
         REQUIRE(std::is_same_v<g_8::value_t, uint8_t>);
         CHECK(p.v == g_8::value_t{});
     }
 
-    SECTION("constructor from value")
+    SUBCASE("constructor from value")
     {
         auto p = g_8(128);
         CHECK(p.v == 128);
     }
 
-    SECTION("converting constructor")
+    SUBCASE("converting constructor")
     {
         auto p = g_f( uint8_t{ 127 } );
         CHECK(p.v == 127);
     }
 
-    SECTION("assignment from value")
+    SUBCASE("assignment from value")
     {
         g_8 p;
         p = 128;
         CHECK(p.v == 128);
     }
 
-    SECTION("comparison operators")
+    SUBCASE("comparison operators")
     {
         auto p1 = g_8(128);
         auto p2 = g_8(127);
@@ -365,7 +366,7 @@ TEST_CASE("pixel_types_test - g")
         CHECK(p1 == p2);
     }
 
-    SECTION("defaulted constructors")
+    SUBCASE("defaulted constructors")
     {
         auto p = g_8(127);
         auto p_copy{ p };
@@ -375,7 +376,7 @@ TEST_CASE("pixel_types_test - g")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("defaulted assignments")
+    SUBCASE("defaulted assignments")
     {
         auto p = g_8(127);
         g_8 p_copy;
@@ -387,7 +388,7 @@ TEST_CASE("pixel_types_test - g")
         CHECK(p_copy == p_move);
     }
 
-    SECTION("ostream")
+    SUBCASE("ostream")
     {
         auto p = g_16(32565);
         std::ostringstream ss;

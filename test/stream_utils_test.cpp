@@ -1,6 +1,7 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
+// doctest
+#include <doctest.h>
 
 // std
 #include <sstream>
@@ -25,13 +26,13 @@ TEST_CASE("stream_utils_test - ostream")
 {
     std::stringstream ss;
 
-    SECTION("vector")
+    SUBCASE("vector")
     {
         ss << std::vector<int>{ 1, 2, 3, 4, 5 };
         REQUIRE(ss.str() == "[1, 2, 3, 4, 5]");
     }
 
-    SECTION("vector")
+    SUBCASE("vector")
     {
         ss << std::list<int>{ 2, 3, 4, 5, 6 };
         REQUIRE(ss.str() == "[2, 3, 4, 5, 6]");

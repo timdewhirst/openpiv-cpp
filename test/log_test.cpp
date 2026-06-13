@@ -1,7 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <future>
@@ -11,8 +12,6 @@
 #include "core/log.h"
 
 using namespace std::string_literals;
-using namespace Catch;
-using namespace Catch::Matchers;
 using namespace openpiv::core;
 using namespace openpiv::core::logger;
 using namespace std::literals;
@@ -57,7 +56,7 @@ TEST_CASE("log_test - add message then sink")
 
     REQUIRE(f.get());
     REQUIRE(level == Level::TEST);
-    REQUIRE_THAT(msg, EndsWith("TEST: 1"s));
+    REQUIRE(doctest::matchers::EndsWith(msg, "TEST: 1"));
 
     logger.remove_sink(id);
 }
@@ -90,7 +89,7 @@ TEST_CASE("log_test - add sink then message")
 
     REQUIRE(f.get());
     REQUIRE(level == Level::TEST);
-    REQUIRE_THAT(msg, EndsWith("TEST: 2"s));
+    REQUIRE(doctest::matchers::EndsWith(msg, "TEST: 2"));
     logger.remove_sink(id);
 }
 
@@ -117,11 +116,11 @@ TEST_CASE("log_test - test primitives")
         };
     auto id = logger.add_sink(std::move(sink));
 
-    logger.add(Level::TEST, "{} {} {} {}", 1, 3.141, "foo!"sv, "bar"sv);
+    logger.add(Level::TEST, "{} {} {} {}", 1, 3.141, "foo!" , "bar" );
 
     REQUIRE(f.get());
     REQUIRE(level == Level::TEST);
-    REQUIRE_THAT(msg, EndsWith("TEST: 1 3.141 foo! bar"s));
+    REQUIRE(doctest::matchers::EndsWith(msg, "TEST: 1 3.141 foo! bar"));
     logger.remove_sink(id);
 }
 
@@ -156,7 +155,7 @@ TEST_CASE("log_test - add multiple messages")
 
     // check that they're in order
     for (size_t i=0; i<count; ++i)
-        REQUIRE_THAT(msgs[i], EndsWith(std::to_string(count)));
+        REQUIRE(doctest::matchers::EndsWith(msgs[i], std::to_string(count)));
 
     logger.remove_sink(id);
 }

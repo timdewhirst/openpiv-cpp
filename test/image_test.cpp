@@ -1,7 +1,8 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-// catch
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+// doctest
+#include <doctest.h>
+#include "doctest_utils.h"
 
 // std
 #include <fstream>
@@ -25,8 +26,6 @@
 
 
 using namespace std::string_literals;
-using namespace Catch;
-using namespace Catch::Matchers;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 
@@ -96,12 +95,12 @@ TEST_CASE("image_test - convert_test")
     std::tie( im, v ) = create_and_fill( {200, 200}, 128_g8 );
     image_g_f im2;
 
-    SECTION( "copy" )
+    SUBCASE( "copy" )
     {
         im2 = image_g_f{ im };
     }
 
-    SECTION( "assign" )
+    SUBCASE( "assign" )
     {
         im2 = im;
     }
@@ -120,7 +119,7 @@ TEST_CASE("image_test - line_out_of_bounds_test")
 
     _REQUIRE_THROWS_MATCHES( im.line(101),
                              std::range_error,
-                             ContainsSubstring( "line out of range"s, CaseSensitive::No ) );
+                             ContainsSubstring( "line out of range" , CaseSensitive::No ) );
 }
 
 TEST_CASE("image_test - line_test")
