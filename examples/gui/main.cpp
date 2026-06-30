@@ -1,6 +1,9 @@
 // std
 #include <iostream>
 
+// file
+#include "ImGuiFD/ImGuiFD.h"
+
 // Dear ImGui
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
@@ -69,6 +72,8 @@ int main(int argc, char* argv[]) {
     // Main loop
     bool done = false;
     SDL_Event event;
+    std::string filename;
+    bool file_dialog_open = false;
 
     while (!done) {
         // Poll SDL events
@@ -90,6 +95,42 @@ int main(int argc, char* argv[]) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
+        // main menu
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Open", "Ctrl+O")) {
+                    std::cout << "opening file dialog...\n";
+                    ImGuiFD::OpenDialog("Choose File", ImGuiFDMode_LoadFile, ".", ".*");
+                    file_dialog_open = true;
+                }
+                if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Quit", "Alt+F4")) { done = true; }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit"))
+            {
+                if (ImGui::MenuItem("Cut", "Ctrl+X")) { /* ... */ }
+                if (ImGui::MenuItem("Copy", "Ctrl+C")) { /* ... */ }
+                if (ImGui::MenuItem("Paste", "Ctrl+V")) { /* ... */ }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
+        }
+
+        if (file_dialog_open) {
+            if (ImGuiFD::BeginDialog("Choose File")) {
+                if (ImGuiFD::ActionDone()) {
+                    if (ImGuiFD::SelectionMade()) {
+                        filename = ImGuiFD::GetSelectionPathString(0);
+                    }
+                    file_dialog_open = false;
+                    ImGuiFD::CloseCurrentDialog();
+                }
+                ImGuiFD::EndDialog();
+            }
+        }
+
         // Main window
         ImGui::Begin("OpenPIV GUI");
 
@@ -107,6 +148,8 @@ int main(int argc, char* argv[]) {
             counter--;
         }
         ImGui::Text("Counter: %d", counter);
+
+        ImGui::Text("Filename: %s", filename.c_str());
 
         // FPS display
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
