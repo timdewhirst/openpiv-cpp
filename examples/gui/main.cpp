@@ -1,5 +1,8 @@
 // std
+#include <functional>
 #include <iostream>
+#include <list>
+#include <string>
 
 // file
 #include "ImGuiFD/ImGuiFD.h"
@@ -11,6 +14,126 @@
 
 // SDL2
 #include <SDL2/SDL.h>
+
+struct RenderNode;
+using RenderNodeList = std::list<RenderNode>;
+class RenderNodeManager;
+
+/// an intrusive list of nodes that can remove themselves once finished
+struct RenderNode {
+    enum result_t {
+        RESULT_OK,
+        RESULT_ERROR,
+        RESULT_DISPOSE
+    };
+    using render_t = std::function<result_t(RenderNodeManager&, RenderNodeList::iterator)>;
+
+    std::string id;
+    render_t render = {};
+};
+
+class RenderNodeManager
+{
+public:
+    void insert(std::string id, RenderNode::render_t&& fn)
+    {
+        _active.push_front(RenderNode{.id = id, .render = fn});
+    }
+
+    void poll()
+    {
+        for (auto I=_active.begin(); I!=_active.end(); ++I) {
+            auto result = I->render(*this, I);
+            switch (result) {
+            case RenderNode::RESULT_ERROR:
+                // \todo: handle this better
+                std::cerr << "error from node: " << I->id << "\n";
+                break;
+
+            case RenderNode::RESULT_DISPOSE:
+                I = _active.erase(I);
+                break;
+
+            case RenderNode::RESULT_OK:
+            default:
+                break;
+            }
+        }
+    }
+
+private:
+    RenderNodeList _active;
+};
+
+
+
+static bool show_demo = false;
+static bool app_done = false;
+static std::string filename;
+
+
+void setup_app_menu(RenderNodeManager& m)
+{
+    m.insert("build app menu",
+             [](RenderNodeManager& mgr, RenderNodeList::iterator) -> RenderNode::result_t {
+                 if (ImGui::BeginMainMenuBar()) {
+                     if (ImGui::BeginMenu("File")) {
+                         if (ImGui::MenuItem("Open", "Ctrl+O")) {
+                             std::cout << "opening file dialog...\n";
+                             mgr.insert("file open",
+                                        [done=false, opened=false](RenderNodeManager& mgr, RenderNodeList::iterator self) mutable -> RenderNode::result_t {
+                                            if (done) {
+                                                return RenderNode::RESULT_DISPOSE;
+                                            }
+
+                                            if (!opened) {
+                                                ImGuiFD::OpenDialog("Choose File", ImGuiFDMode_LoadFile, ".", ".*");
+                                                opened = true;
+                                            }
+
+                                            if (ImGuiFD::BeginDialog("Choose File")) {
+                                                if (ImGuiFD::ActionDone()) {
+                                                    if (ImGuiFD::SelectionMade()) {
+                                                        filename = ImGuiFD::GetSelectionPathString(0);
+                                                    }
+                                                    ImGuiFD::CloseCurrentDialog();
+                                                    done = true;
+                                                }
+                                                ImGuiFD::EndDialog();
+                                            }
+                                            return RenderNode::RESULT_OK;
+                                        });
+                         }
+                         if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
+                         ImGui::Separator();
+                         if (ImGui::MenuItem("Quit", "Alt+F4")) { app_done = true; }
+                         ImGui::EndMenu();
+                     }
+                     if (ImGui::BeginMenu("Edit")) {
+                         if (ImGui::MenuItem("Cut", "Ctrl+X")) { /* ... */ }
+                         if (ImGui::MenuItem("Copy", "Ctrl+C")) { /* ... */ }
+                         if (ImGui::MenuItem("Paste", "Ctrl+V")) { /* ... */ }
+                         ImGui::EndMenu();
+                     }
+                     ImGui::EndMainMenuBar();
+                 }
+
+                 return RenderNode::RESULT_OK;
+             });
+}
+
+void setup_demo(RenderNodeManager& m)
+{
+    m.insert("show demo",
+             [](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
+                 // Optional: Show ImGui demo window
+                 if (!show_demo)
+                     return RenderNode::RESULT_OK;
+
+                 ImGui::ShowDemoWindow(&show_demo);
+                 return RenderNode::RESULT_OK;
+             });
+}
 
 int main(int argc, char* argv[]) {
     // Initialize SDL
@@ -70,23 +193,27 @@ int main(int argc, char* argv[]) {
     ImGui_ImplSDLRenderer2_Init(renderer);
 
     // Main loop
-    bool done = false;
     SDL_Event event;
-    std::string filename;
-    bool file_dialog_open = false;
 
-    while (!done) {
+    RenderNodeManager mgr;
+
+    // setup
+    setup_app_menu(mgr);
+    setup_demo(mgr);
+
+
+    while (!app_done) {
         // Poll SDL events
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
 
             if (event.type == SDL_QUIT) {
-                done = true;
+                app_done = true;
             }
             if (event.type == SDL_WINDOWEVENT &&
                 event.window.event == SDL_WINDOWEVENT_CLOSE &&
                 event.window.windowID == SDL_GetWindowID(window)) {
-                done = true;
+                app_done = true;
             }
         }
 
@@ -95,76 +222,39 @@ int main(int argc, char* argv[]) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        // main menu
-        if (ImGui::BeginMainMenuBar()) {
-            if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Open", "Ctrl+O")) {
-                    std::cout << "opening file dialog...\n";
-                    ImGuiFD::OpenDialog("Choose File", ImGuiFDMode_LoadFile, ".", ".*");
-                    file_dialog_open = true;
-                }
-                if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Quit", "Alt+F4")) { done = true; }
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Edit"))
-            {
-                if (ImGui::MenuItem("Cut", "Ctrl+X")) { /* ... */ }
-                if (ImGui::MenuItem("Copy", "Ctrl+C")) { /* ... */ }
-                if (ImGui::MenuItem("Paste", "Ctrl+V")) { /* ... */ }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMainMenuBar();
-        }
-
-        if (file_dialog_open) {
-            if (ImGuiFD::BeginDialog("Choose File")) {
-                if (ImGuiFD::ActionDone()) {
-                    if (ImGuiFD::SelectionMade()) {
-                        filename = ImGuiFD::GetSelectionPathString(0);
-                    }
-                    file_dialog_open = false;
-                    ImGuiFD::CloseCurrentDialog();
-                }
-                ImGuiFD::EndDialog();
-            }
-        }
+        mgr.poll();
 
         // Main window
-        ImGui::Begin("OpenPIV GUI");
+        static bool dialog_active = true;
+        if (dialog_active) {
+            ImGui::Begin("OpenPIV GUI", &dialog_active);
 
-        ImGui::Text("Welcome to OpenPIV GUI Example");
-        ImGui::Text("This is a basic Dear ImGui + SDL2 application.");
-        ImGui::Separator();
+            ImGui::Text("Welcome to OpenPIV GUI Example");
+            ImGui::Text("This is a basic Dear ImGui + SDL2 application.");
+            ImGui::Separator();
 
-        // Simple demo content
-        static int counter = 0;
-        if (ImGui::Button("Increment")) {
-            counter++;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Decrement")) {
-            counter--;
-        }
-        ImGui::Text("Counter: %d", counter);
+            // Simple demo content
+            static int counter = 0;
+            if (ImGui::Button("Increment")) {
+                counter++;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Decrement")) {
+                counter--;
+            }
+            ImGui::Text("Counter: %d", counter);
 
-        ImGui::Text("Filename: %s", filename.c_str());
+            ImGui::Text("Filename: %s", filename.c_str());
 
-        // FPS display
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+            // FPS display
+            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
-        // Demo window option
-        static bool show_demo = false;
-        if (ImGui::Button("Show ImGui Demo Window")) {
-            show_demo = !show_demo;
-        }
+            // Demo window option
+            if (ImGui::Button("Show ImGui Demo Window")) {
+                show_demo = !show_demo;
+            }
 
-        ImGui::End();
-
-        // Optional: Show ImGui demo window
-        if (show_demo) {
-            ImGui::ShowDemoWindow(&show_demo);
+            ImGui::End();
         }
 
         // Rendering
