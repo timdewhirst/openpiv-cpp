@@ -1,8 +1,11 @@
 // std
+#include <any>
 #include <functional>
 #include <iostream>
 #include <list>
 #include <string>
+#include <unordered_map>
+#include <variant>
 
 // file
 #include "ImGuiFD/ImGuiFD.h"
@@ -14,6 +17,35 @@
 
 // SDL2
 #include <SDL2/SDL.h>
+
+// openpiv
+#include "core/format_utils.h"
+
+using PropertyValue = std::variant<std::monostate, int, double, bool, std::string>;
+using Properties = std::unordered_map<std::string, PropertyValue>;
+
+// helper type for the visitor #4
+template<class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
+
+
+std::ostream& operator<<(std::ostream& os, const Properties& ps)
+{
+    for (const auto& [k, v] : ps) {
+        os << k << ": ";
+        std::visit(
+            overloaded(
+                [&os](std::monostate){os << "[null]";},
+                [&os](const auto& v){os << v;}
+            ), v);
+    }
+    return os;
+}
+
 
 struct RenderNode;
 using RenderNodeList = std::list<RenderNode>;
@@ -61,15 +93,42 @@ public:
         }
     }
 
+    void setState(const Properties& ps)
+    {
+        for (const auto& [k, v] : ps)
+            _properties[k] = v;
+    }
+
+    void setState(std::string k, PropertyValue v)
+    {
+        _properties[k] = std::move(v);
+    }
+
+    const Properties& state() const
+    {
+        return _properties;
+    }
+
+    template <typename T>
+    T state(const std::string& key) const
+    {
+        auto I = _properties.find(key);
+        if (I == _properties.end())
+            return {};
+
+        const T* value = std::get_if<T>(&I->second);
+        return value ? *value : T{};
+    }
+
 private:
     RenderNodeList _active;
+    Properties _properties;
 };
 
 
 
 static bool show_demo = false;
 static bool app_done = false;
-static std::string filename;
 
 
 void setup_app_menu(RenderNodeManager& m)
@@ -94,7 +153,7 @@ void setup_app_menu(RenderNodeManager& m)
                                             if (ImGuiFD::BeginDialog("Choose File")) {
                                                 if (ImGuiFD::ActionDone()) {
                                                     if (ImGuiFD::SelectionMade()) {
-                                                        filename = ImGuiFD::GetSelectionPathString(0);
+                                                        mgr.setState("filename", ImGuiFD::GetSelectionPathString(0));
                                                     }
                                                     ImGuiFD::CloseCurrentDialog();
                                                     done = true;
@@ -244,7 +303,7 @@ int main(int argc, char* argv[]) {
             }
             ImGui::Text("Counter: %d", counter);
 
-            ImGui::Text("Filename: %s", filename.c_str());
+            ImGui::Text("Filename: %s", mgr.state<std::string>("filename").c_str());
 
             // FPS display
             ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
