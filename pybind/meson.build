@@ -39,6 +39,6 @@ if pybind_option
     cpp_args: ['-D_USE_MATH_DEFINES'],
     link_args: ['-l' + py_lib_name],
     name_prefix: '',
-    install: true,
+    install: true
   )
 endif
