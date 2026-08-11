@@ -11,10 +11,10 @@ There are some external dependencies under external/, so when cloning use:
 
 ```git clone --recursive <path to git repo>```
 
-Building uses cmake; pre-requisites are:
+Building uses meson; pre-requisites are:
 
 * a compiler (e.g. `apt install build-essentials`)
-* cmake
+* meson
 * git
 * (linux) pkg-config (e.g. `apt install pkg-config`)
 * curl, zip, unzip, tar (e.g. `apt install curl zip unzip tar`)
@@ -22,52 +22,34 @@ Building uses cmake; pre-requisites are:
 
 To build:
 
-* `cmake -B build -S .`
-* `cmake --build build`
+* `meson setup builddir -Dbuild_pybind=true --reconfigure`
+  * add `--buildtype`: debug, debugoptimized, release, minsize
+* `meson compile -C builddir`
 
 To run tests:
 
-* `cd build`
-* `ctest`
-
-To change the build type, add `-DCMAKE_BUILD_TYPE` e.g.
-`cmake -DCMAKE_BUILD_TYPE=RelWithDebugInfo -B build -S .`.
+* `meson test -C builddir`
 
 The binaries are located in the build directory:
 
-* build
+* builddir
   * test -> *_test
   * examples
     * process
     * average_subtract
-  * openpiv -> libopenpivcore.so
+    * ...
+  * pybind
 
 ### Python Bindings
 
-Python bindings are made through pybind11. Building python modules
-appears to be a non-trivial subject, however a setup.py is provided to
-build the core library as well as the python bindings using cmake.
+Python bindings are made through pybind11.
 
-To build using pip/setuptools:
+To build using pip:
 
 * create a venv at the same level as the openpivcore directory
 * activate the venv
 * run pip against the name of the directory containing the openpiv code e.g. `pip install <path to source>`
-  * a clean step should happen as part of the build, this can also be run manually with `python setup.py clean`
 
-To build using cmake:
-
-* install pybind11 using pip
-* install pytest using pip
-* specify the location of the installed pybind11 libs/cmake modules
-  using `-Dpybind11_ROOT=$(pybind11-config --cmakedir)`
-* specify that the python bindings should be built: `-DBUILD_PYBIND=ON`
-
-e.g.
-
-```
-cmake -B build -S . -DBUILD_PYBIND=ON -Dpybind11_ROOT=$(pybind11-config --cmakedir)
-```
 
 ## Examples
 
