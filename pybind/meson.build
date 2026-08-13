@@ -24,8 +24,32 @@ if pybind_option
     'core/vector.cpp',
   )
 
-  ext_suffix = run_command('python3-config', '--extension-suffix', check: true).stdout().strip().replace('.so', '')
-  py_lib_name = run_command('python3', '-c', 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")', check: true).stdout().strip()
+  # get info
+  ext_suffix = run_command(
+    'python3',
+    '-c',
+    'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))',
+    check: true).stdout().strip().replace('.so', '')
+  message('extension: ', ext_suffix)
+  py_lib_name = run_command(
+    'python3',
+    '-c',
+    'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")',
+    check: true).stdout().strip()
+  message('py_lib_name: ', py_lib_name)
+  py_lib_dir = run_command(
+    'python3',
+    '-c',
+    'import sysconfig; print(sysconfig.get_path("platstdlib"))',
+    check: true).stdout().strip()
+  message('py_lib_dir: ', py_lib_dir)
+  py_site_dir = run_command(
+    'python3',
+    '-c',
+    'import sysconfig; print(sysconfig.get_path("platlib"))',
+    check: true).stdout().strip()
+  message('install directory: ', py_site_dir)
+
   pybind_mod = shared_library('pyopenpivcore' + ext_suffix,
     sources: py_sources,
     include_directories: [
@@ -39,6 +63,7 @@ if pybind_option
     cpp_args: ['-D_USE_MATH_DEFINES'],
     link_args: ['-l' + py_lib_name],
     name_prefix: '',
-    install: true
+    install: true,
+    install_dir: py_site_dir,
   )
 endif

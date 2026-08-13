@@ -8,3 +8,6 @@ build-backend = "mesonpy"
 [project]
 name = "pyopenpivcore"
 version = "0.1.0"
+
+[tool.meson-python.args]
+setup = ['-Dbuild_pybind=true']
