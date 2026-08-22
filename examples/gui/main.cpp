@@ -21,37 +21,14 @@
 // openpiv
 #include "core/format_utils.h"
 
-using PropertyValue = std::variant<std::monostate, int, double, bool, std::string>;
-using Properties = std::unordered_map<std::string, PropertyValue>;
-
-// helper type for the visitor #4
-template<class... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
-
-// explicit deduction guide (not needed as of C++20)
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
-
-std::ostream& operator<<(std::ostream& os, const Properties& ps)
-{
-    for (const auto& [k, v] : ps) {
-        os << k << ": ";
-        std::visit(
-            overloaded(
-                [&os](std::monostate){os << "[null]";},
-                [&os](const auto& v){os << v;}
-            ), v);
-    }
-    return os;
-}
+// local
+#include "property.h"
 
 
 struct RenderNode;
 using RenderNodeList = std::list<RenderNode>;
 class RenderNodeManager;
 
-/// an intrusive list of nodes that can remove themselves once finished
 struct RenderNode {
     enum result_t {
         RESULT_OK,
@@ -194,7 +171,8 @@ void setup_demo(RenderNodeManager& m)
              });
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
