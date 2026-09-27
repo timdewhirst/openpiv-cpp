@@ -5,10 +5,17 @@ sdl2_dep = dependency('sdl2')
 sdl2_image_dep = dependency('sdl2_image')
 
 # source files
-app_src = files('main.cpp')
+app_src = files(
+	'main.cpp',
+	'backend.cpp',
+	'sdl2_backend.cpp'
+	)
 
 # ImGuiFD files
-fd_src = files('ImGuiFD/ImGuiFD.cpp', 'ImGuiFD/ImGuiFDNative.cpp')
+fd_src = files(
+       'ImGuiFD/ImGuiFD.cpp',
+       'ImGuiFD/ImGuiFDNative.cpp'
+       )
 
 # executable
 executable(

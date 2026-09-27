@@ -2,16 +2,20 @@
 
 // std
 #include <functional>
+#include <string_view>
+#include <unique_ptr>
 
-/// common interface for abstracting backend details;
-/// no need to be virtual atm as implementation can
-/// be a compile time option
+/// abstract backend
 class Backend
 {
 public:
-    bool Init();
-    void Run(const std::function<void()>& drawCallback);
-    void BeginFrame();
-    void EndFrame();
-    bool ShouldClose() const;
+  virtual bool init(std::string_view) = 0;
+  virtual void run(const std::function<void()>& draw_callback) = 0;
+  virtual void begin_frame() = 0;
+  virtual void end_frame() = 0;
+  virtual bool should_close() const = 0;
+
+  /// factory method 
+  static std::unique_ptr<Backend> create(std::string_view);
 };
+

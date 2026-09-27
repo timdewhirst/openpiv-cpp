@@ -32,7 +32,7 @@
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
 
-int main( int argc, char* argv[] )
+int main(int argc, char* argv[])
 {
     // get arguments
     cxxopts::Options options(argv[0]);

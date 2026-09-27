@@ -7,21 +7,21 @@
 #include <unordered_map>
 #include <variant>
 
+// utils
+#include <cxxopts.hpp>
+
 // file
 #include "ImGuiFD/ImGuiFD.h"
 
 // Dear ImGui
 #include "imgui.h"
-#include "imgui_impl_sdl2.h"
-#include "imgui_impl_sdlrenderer2.h"
-
-// SDL2
-#include <SDL2/SDL.h>
 
 // openpiv
 #include "core/format_utils.h"
+#include "core/log.h"
 
 // local
+#include "backend.h"
 #include "property.h"
 
 
@@ -173,44 +173,50 @@ void setup_demo(RenderNodeManager& m)
 
 int main(int argc, char* argv[])
 {
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
-        return 1;
+  cxxopts::Options options(argv[0]);
+  auto log_level = logger::Level::INFO;
+
+  try
+  {
+    options
+      .add_options()
+      ("h, help", "help", cxxopts::value<bool>())
+      ("loglevel", "log level", cxxopts::value<logger::Level>(log_level)->default_value("INFO"));
+
+    auto result = options.parse(argc, argv);
+
+    // setup logger
+    logger::Logger::instance().add_sink(
+      [log_level](logger::Level l, const std::string& m) -> bool
+      {
+	if ( l > log_level )
+	  return true;
+	
+	std::cerr << m << "\n";
+	return true;
+      });
+    
+    if (result.count("help"))
+    {
+      std::cout << options.help({""}) << "\n";
+      return 0;
     }
+  }
+  catch (const std::exception& e)
+  {
+    logger::error("error parsing options: {}", e.what());
+    return 1;
+  }
+  
+  auto backend = Backend::create("sdl2");
+  if (!backend)
+  {
+    logger::error("failed to create backend");
+    return 1;
+  }
 
-    // Set up SDL window
-    const int width = 1280;
-    const int height = 720;
-    SDL_Window* window = SDL_CreateWindow(
-        "OpenPIV GUI",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        width,
-        height,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
-    );
-
-    if (!window) {
-        std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
-        SDL_Quit();
-        return 1;
-    }
-
-    // Create SDL renderer
-    SDL_Renderer* renderer = SDL_CreateRenderer(
-        window,
-        -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-    );
-
-    if (!renderer) {
-        std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
-
+  backend->init("openpiv");
+  
     // Set up Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -225,13 +231,7 @@ int main(int argc, char* argv[])
     // Set up Dear ImGui style
     ImGui::StyleColorsDark();
 
-    // Initialize platform/renderer backends
-    ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
-    ImGui_ImplSDLRenderer2_Init(renderer);
-
-    // Main loop
-    SDL_Event event;
-
+    // main gui
     RenderNodeManager mgr;
 
     // setup
@@ -240,6 +240,7 @@ int main(int argc, char* argv[])
 
 
     while (!app_done) {
+      
         // Poll SDL events
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
