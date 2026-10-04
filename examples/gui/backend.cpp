@@ -6,6 +6,6 @@
 
 std::unique_ptr<Backend> Backend::create(std::string_view)
 {
-  // only SDL2 atm
-  return std::make_unique<SDL2Backend>();
+    // only SDL2 atm
+    return std::make_unique<SDL2Backend>();
 }

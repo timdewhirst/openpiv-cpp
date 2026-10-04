@@ -20,6 +20,9 @@
 #include "core/format_utils.h"
 #include "core/log.h"
 
+using namespace openpiv;
+namespace logger = openpiv::core::logger;
+
 // local
 #include "backend.h"
 #include "property.h"
@@ -104,10 +107,6 @@ private:
 
 
 
-static bool show_demo = false;
-static bool app_done = false;
-
-
 void setup_app_menu(RenderNodeManager& m)
 {
     m.insert("build app menu",
@@ -142,7 +141,7 @@ void setup_app_menu(RenderNodeManager& m)
                          }
                          if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
                          ImGui::Separator();
-                         if (ImGui::MenuItem("Quit", "Alt+F4")) { app_done = true; }
+                         if (ImGui::MenuItem("Quit", "Alt+F4")) { mgr.setState("app_done", true); }
                          ImGui::EndMenu();
                      }
                      if (ImGui::BeginMenu("Edit")) {
@@ -161,8 +160,9 @@ void setup_app_menu(RenderNodeManager& m)
 void setup_demo(RenderNodeManager& m)
 {
     m.insert("show demo",
-             [](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
+             [&m](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
                  // Optional: Show ImGui demo window
+                 bool show_demo = m.state<bool>("show_demo");
                  if (!show_demo)
                      return RenderNode::RESULT_OK;
 
@@ -173,50 +173,45 @@ void setup_demo(RenderNodeManager& m)
 
 int main(int argc, char* argv[])
 {
-  cxxopts::Options options(argv[0]);
-  auto log_level = logger::Level::INFO;
+    cxxopts::Options options(argv[0]);
+    auto log_level = logger::Level::INFO;
 
-  try
-  {
-    options
-      .add_options()
-      ("h, help", "help", cxxopts::value<bool>())
-      ("loglevel", "log level", cxxopts::value<logger::Level>(log_level)->default_value("INFO"));
+    try {
+        options
+            .add_options()
+            ("h, help", "help", cxxopts::value<bool>())
+            ("loglevel", "log level", cxxopts::value<logger::Level>(log_level)->default_value("INFO"));
 
-    auto result = options.parse(argc, argv);
+        auto result = options.parse(argc, argv);
 
-    // setup logger
-    logger::Logger::instance().add_sink(
-      [log_level](logger::Level l, const std::string& m) -> bool
-      {
-	if ( l > log_level )
-	  return true;
-	
-	std::cerr << m << "\n";
-	return true;
-      });
-    
-    if (result.count("help"))
-    {
-      std::cout << options.help({""}) << "\n";
-      return 0;
+        // setup logger
+        logger::Logger::instance().add_sink(
+            [log_level](logger::Level l, const std::string& m) -> bool
+            {
+                if ( l > log_level )
+                    return true;
+
+                std::cerr << m << "\n";
+                return true;
+            });
+
+        if (result.count("help"))
+        {
+            std::cout << options.help({""}) << "\n";
+            return 0;
+        }
     }
-  }
-  catch (const std::exception& e)
-  {
-    logger::error("error parsing options: {}", e.what());
-    return 1;
-  }
-  
-  auto backend = Backend::create("sdl2");
-  if (!backend)
-  {
-    logger::error("failed to create backend");
-    return 1;
-  }
+    catch (const std::exception& e) {
+        logger::error("error parsing options: {}", e.what());
+        return 1;
+    }
 
-  backend->init("openpiv");
-  
+    auto backend = Backend::create("sdl2");
+    if (!backend) {
+        logger::error("failed to create backend");
+        return 1;
+    }
+
     // Set up Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -238,32 +233,17 @@ int main(int argc, char* argv[])
     setup_app_menu(mgr);
     setup_demo(mgr);
 
+    backend->init("openpiv");
 
-    while (!app_done) {
-      
-        // Poll SDL events
-        while (SDL_PollEvent(&event)) {
-            ImGui_ImplSDL2_ProcessEvent(&event);
-
-            if (event.type == SDL_QUIT) {
-                app_done = true;
-            }
-            if (event.type == SDL_WINDOWEVENT &&
-                event.window.event == SDL_WINDOWEVENT_CLOSE &&
-                event.window.windowID == SDL_GetWindowID(window)) {
-                app_done = true;
-            }
-        }
-
-        // Start the Dear ImGui frame
-        ImGui_ImplSDLRenderer2_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
-        ImGui::NewFrame();
+    // run
+    backend->run([&mgr](){
+        if (mgr.state<bool>("app_done"))
+            return true;
 
         mgr.poll();
 
         // Main window
-        static bool dialog_active = true;
+        bool dialog_active = mgr.state<bool>("dialog_active");
         if (dialog_active) {
             ImGui::Begin("OpenPIV GUI", &dialog_active);
 
@@ -289,28 +269,14 @@ int main(int argc, char* argv[])
 
             // Demo window option
             if (ImGui::Button("Show ImGui Demo Window")) {
-                show_demo = !show_demo;
+                mgr.setState("show_demo", mgr.state<bool>("show_demo"));
             }
 
             ImGui::End();
         }
 
-        // Rendering
-        ImGui::Render();
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
-        SDL_RenderPresent(renderer);
-    }
-
-    // Cleanup
-    ImGui_ImplSDLRenderer2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+        return false;
+    });
 
     return 0;
 }
