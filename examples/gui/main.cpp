@@ -89,15 +89,16 @@ public:
         return _properties;
     }
 
-    template <typename T>
-    T state(const std::string& key) const
+    template <typename T, class Self>
+    decltype(auto) state(this Self&& self, const std::string& key)
     {
-        auto I = _properties.find(key);
-        if (I == _properties.end())
-            return {};
+        static T static_t {};
+        auto I = self._properties.find(key);
+        if (I == self._properties.end())
+            return (static_t);
 
-        const T* value = std::get_if<T>(&I->second);
-        return value ? *value : T{};
+        T* value = std::get_if<T>(&I->second);
+        return value ? (*value) : (static_t);
     }
 
 private:
@@ -105,6 +106,21 @@ private:
     Properties _properties;
 };
 
+
+void setup_demo(RenderNodeManager& m)
+{
+    m.setState("show_demo", true);
+    m.insert("show demo",
+             [&m](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
+                 // Optional: Show ImGui demo window
+                 bool& show_demo = m.state<bool>("show_demo");
+                 if (!show_demo)
+                     return RenderNode::RESULT_DISPOSE;
+
+                 ImGui::ShowDemoWindow(&show_demo);
+                 return RenderNode::RESULT_OK;
+             });
+}
 
 
 void setup_app_menu(RenderNodeManager& m)
@@ -141,6 +157,10 @@ void setup_app_menu(RenderNodeManager& m)
                          }
                          if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
                          ImGui::Separator();
+                         if (ImGui::MenuItem("Demo", "Ctrl+D")) {
+                             setup_demo(mgr);
+                         }
+                         ImGui::Separator();
                          if (ImGui::MenuItem("Quit", "Alt+F4")) { mgr.setState("app_done", true); }
                          ImGui::EndMenu();
                      }
@@ -153,20 +173,6 @@ void setup_app_menu(RenderNodeManager& m)
                      ImGui::EndMainMenuBar();
                  }
 
-                 return RenderNode::RESULT_OK;
-             });
-}
-
-void setup_demo(RenderNodeManager& m)
-{
-    m.insert("show demo",
-             [&m](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
-                 // Optional: Show ImGui demo window
-                 bool show_demo = m.state<bool>("show_demo");
-                 if (!show_demo)
-                     return RenderNode::RESULT_OK;
-
-                 ImGui::ShowDemoWindow(&show_demo);
                  return RenderNode::RESULT_OK;
              });
 }
