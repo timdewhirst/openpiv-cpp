@@ -73,13 +73,13 @@ public:
         }
     }
 
-    void setState(const Properties& ps)
+    void set_state(const Properties& ps)
     {
         for (const auto& [k, v] : ps)
             _properties[k] = v;
     }
 
-    void setState(std::string k, PropertyValue v)
+    void set_state(std::string k, PropertyValue v)
     {
         _properties[k] = std::move(v);
     }
@@ -106,14 +106,13 @@ private:
     Properties _properties;
 };
 
-
 void setup_demo(RenderNodeManager& m)
 {
-    m.setState("show_demo", true);
+    m.set_state("show_demo", true);
     m.insert("show demo",
-             [&m](RenderNodeManager&, RenderNodeList::iterator) -> RenderNode::result_t {
+             [](RenderNodeManager& mgr, RenderNodeList::iterator) -> RenderNode::result_t {
                  // Optional: Show ImGui demo window
-                 bool& show_demo = m.state<bool>("show_demo");
+                 bool& show_demo = mgr.state<bool>("show_demo");
                  if (!show_demo)
                      return RenderNode::RESULT_DISPOSE;
 
@@ -122,6 +121,47 @@ void setup_demo(RenderNodeManager& m)
              });
 }
 
+void setup_dialog(RenderNodeManager& m)
+{
+    m.set_state("dialog_active", true);
+    m.insert("show dialog",
+             [](RenderNodeManager& mgr, RenderNodeList::iterator) -> RenderNode::result_t {
+                 bool& dialog_active = mgr.state<bool>("dialog_active");
+
+                 if (!dialog_active)
+                     return RenderNode::RESULT_DISPOSE;
+
+                 ImGui::Begin("OpenPIV GUI", &dialog_active);
+
+                 ImGui::Text("Welcome to OpenPIV GUI Example");
+                 ImGui::Text("This is a basic Dear ImGui + SDL2 application.");
+                 ImGui::Separator();
+
+                 // Simple demo content
+                 static int counter = 0;
+                 if (ImGui::Button("Increment")) {
+                     counter++;
+                 }
+                 ImGui::SameLine();
+                 if (ImGui::Button("Decrement")) {
+                     counter--;
+                 }
+                 ImGui::Text("Counter: %d", counter);
+
+                 ImGui::Text("Filename: %s", mgr.state<std::string>("filename").c_str());
+
+                 // FPS display
+                 ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+
+                 // Demo window option
+                 if (ImGui::Button("Show ImGui Demo Window")) {
+                     setup_demo(mgr);
+                 }
+
+                 ImGui::End();
+                 return RenderNode::RESULT_OK;
+             });
+}
 
 void setup_app_menu(RenderNodeManager& m)
 {
@@ -145,7 +185,7 @@ void setup_app_menu(RenderNodeManager& m)
                                             if (ImGuiFD::BeginDialog("Choose File")) {
                                                 if (ImGuiFD::ActionDone()) {
                                                     if (ImGuiFD::SelectionMade()) {
-                                                        mgr.setState("filename", ImGuiFD::GetSelectionPathString(0));
+                                                        mgr.set_state("filename", ImGuiFD::GetSelectionPathString(0));
                                                     }
                                                     ImGuiFD::CloseCurrentDialog();
                                                     done = true;
@@ -157,11 +197,10 @@ void setup_app_menu(RenderNodeManager& m)
                          }
                          if (ImGui::MenuItem("Save", "Ctrl+S")) { /* save action */ }
                          ImGui::Separator();
-                         if (ImGui::MenuItem("Demo", "Ctrl+D")) {
-                             setup_demo(mgr);
-                         }
+                         if (ImGui::MenuItem("Demo", "Ctrl+D")) setup_demo(mgr);
+                         if (ImGui::MenuItem("Main", "Ctrl+M")) setup_dialog(mgr);
                          ImGui::Separator();
-                         if (ImGui::MenuItem("Quit", "Alt+F4")) { mgr.setState("app_done", true); }
+                         if (ImGui::MenuItem("Quit", "Alt+F4")) mgr.set_state("app_done", true);
                          ImGui::EndMenu();
                      }
                      if (ImGui::BeginMenu("Edit")) {
@@ -234,10 +273,12 @@ int main(int argc, char* argv[])
 
     // main gui
     RenderNodeManager mgr;
+    mgr.set_state("dialog_active", true);
 
     // setup
     setup_app_menu(mgr);
     setup_demo(mgr);
+    setup_dialog(mgr);
 
     backend->init("openpiv");
 
@@ -247,40 +288,6 @@ int main(int argc, char* argv[])
             return true;
 
         mgr.poll();
-
-        // Main window
-        bool dialog_active = mgr.state<bool>("dialog_active");
-        if (dialog_active) {
-            ImGui::Begin("OpenPIV GUI", &dialog_active);
-
-            ImGui::Text("Welcome to OpenPIV GUI Example");
-            ImGui::Text("This is a basic Dear ImGui + SDL2 application.");
-            ImGui::Separator();
-
-            // Simple demo content
-            static int counter = 0;
-            if (ImGui::Button("Increment")) {
-                counter++;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Decrement")) {
-                counter--;
-            }
-            ImGui::Text("Counter: %d", counter);
-
-            ImGui::Text("Filename: %s", mgr.state<std::string>("filename").c_str());
-
-            // FPS display
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-
-            // Demo window option
-            if (ImGui::Button("Show ImGui Demo Window")) {
-                mgr.setState("show_demo", mgr.state<bool>("show_demo"));
-            }
-
-            ImGui::End();
-        }
-
         return false;
     });
 
