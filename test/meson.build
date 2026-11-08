@@ -15,6 +15,7 @@ endforeach
 test_sources = [
   'enum_helper_test.cpp',
   'grid_test.cpp',
+  'image2_test.cpp',
   'image_algos_test.cpp',
   'image_expression_test.cpp',
   'image_loader_test.cpp',
@@ -23,6 +24,7 @@ test_sources = [
   'image_utils_test.cpp',
   'image_view_test.cpp',
   'log_test.cpp',
+  'pixel_format_test.cpp',
   'pixel_types_test.cpp',
   'point_test.cpp',
   'range_test.cpp',
