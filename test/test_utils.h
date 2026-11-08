@@ -24,11 +24,12 @@ inline image load_from_file( const std::string& filename )
     if ( !loader )
         exception_builder<std::runtime_error>() << "failed to find loader for " << filename;
 
-    image result;
-    loader->load( is, result );
+    auto result = loader->load( is );
+    if ( !result )
+        exception_builder<std::runtime_error>() << "failed to load image from " << filename;
     is.close();
 
-    return result;
+    return std::move( *result );
 }
 
 /// save an image as PNM; note that PNM is 16-bit so pixel data may

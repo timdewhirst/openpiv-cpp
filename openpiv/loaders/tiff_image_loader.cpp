@@ -120,21 +120,21 @@ namespace openpiv::core {
         /// samples; 1 sample per pixel (grey) or 3 contiguous
         /// samples per pixel (RGB); libtiff renders sample data in
         /// machine byte order
-        bool extract( size_t index, image& im ) const
+        std::optional<image> extract( size_t index ) const
         {
             if ( !tiff )
-                return false;
+                return std::nullopt;
 
             if ( !(spp == 1 || spp == 3) )
             {
                 logger::error("images with spp != 1 or 3 not yet supported: ({})", spp);
-                return false;
+                return std::nullopt;
             }
 
             if ( num_images <= index )
             {
                 logger::error("image index out of range (index: {}, num_images: {}", index, num_images);
-                return false;
+                return std::nullopt;
             }
 
             if ( !(bps == 8 || bps == 16) ||
@@ -144,21 +144,21 @@ namespace openpiv::core {
             {
                 logger::error("unsupported tiff: bps: {}, format: {}, planar: {}",
                               bps, to_string(format), to_string(planar));
-                return false;
+                return std::nullopt;
             }
 
             // get correct image
             if ( TIFFSetDirectory( tiff.get(), static_cast<uint16_t>( index ) ) == 0 )
             {
                 logger::error("failed to set directory to: {}", index);
-                return false;
+                return std::nullopt;
             }
 
             const pixel_format im_format{
                 spp == 1
                     ? (bps == 8 ? pixel_format::GREY_U8 : pixel_format::GREY_U16)
                     : (bps == 8 ? pixel_format::RGB_U8 : pixel_format::RGB_U16) };
-            im = image( width, height, im_format );
+            image im( width, height, im_format );
 
             // per-line reads; scanline size matches image pitch
             std::vector<uint8_t> buffer( TIFFScanlineSize( tiff.get() ) );
@@ -168,7 +168,7 @@ namespace openpiv::core {
                 std::memcpy( im.line( h ), buffer.data(), im.pitch() );
             }
 
-            return true;
+            return im;
         }
     };
 
@@ -238,12 +238,12 @@ namespace openpiv::core {
         return impl_->open();
     }
 
-    bool tiff_image_loader::extract( size_t index, image& im )
+    std::optional<image> tiff_image_loader::extract( size_t index )
     {
         if ( !impl_ )
-            return false;
+            return std::nullopt;
 
-        return impl_->extract( index, im );
+        return impl_->extract( index );
     }
 
     void tiff_image_loader::save( std::ostream&, const image& ) const

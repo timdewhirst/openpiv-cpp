@@ -5,6 +5,7 @@
 #include <cinttypes>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -114,10 +115,13 @@ int main( int argc, char* argv[] )
             if ( !loader )
                 core::exception_builder<std::runtime_error>() << "failed to find loader for " << input_file;
 
-            core::image image;
-            loader->load( is, image );
+            auto image{ loader->load( is ) };
+            if ( !image )
+                core::exception_builder<std::runtime_error>()
+                    << "failed to load image from " << input_file;
+
             // process in double precision
-            images.emplace_back( core::convert( image, core::pixel_format::GREY_F64 ) );
+            images.emplace_back( core::convert( *image, core::pixel_format::GREY_F64 ) );
         }
     }
     catch ( std::exception& e )

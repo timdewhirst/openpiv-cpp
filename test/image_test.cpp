@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 // to be tested
@@ -41,25 +42,12 @@ namespace {
 
 }
 
-TEST_CASE("image-default-construction")
+TEST_CASE("image-no-default-construction")
 {
-    image im;
-    CHECK( im.format() == pixel_format::UNKNOWN );
-    CHECK( im.width() == 0 );
-    CHECK( im.height() == 0 );
-    CHECK( im.pixel_count() == 0 );
-    CHECK( im.data() == nullptr );
-    CHECK( im.pitch() == 0 );
-
-    // copy of empty image shares nothing but is equal
-    const image im2{ im };
-    CHECK( im2 == im );
-    CHECK( im == image{} );
-
-    // empty images throw on access
-    REQUIRE_THROWS_AS( im.at<g_8>( 0 ), std::runtime_error );
-    REQUIRE_THROWS_AS( im.line( 0 ), std::runtime_error );
-    REQUIRE_THROWS_AS( im.sub_image( core::rect::from_size( {4, 4}) ), std::runtime_error );
+    // images are fixed in geometry and format at construction; there
+    // is no empty image
+    static_assert( !std::is_default_constructible_v<image>,
+                   "image must not be default constructible" );
 
     // unknown format is rejected
     REQUIRE_THROWS_AS( image( 4, 4, pixel_format::UNKNOWN ), std::invalid_argument );
@@ -339,7 +327,6 @@ TEST_CASE("image-convert")
 
     // bad requests
     REQUIRE_THROWS_AS( convert( grey, pixel_format::UNKNOWN ), std::invalid_argument );
-    REQUIRE_THROWS_AS( convert( image{}, pixel_format::GREY_U8 ), std::runtime_error );
 }
 
 TEST_CASE("image-swap-and-stream")

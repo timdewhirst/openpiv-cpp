@@ -5,6 +5,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -100,16 +101,21 @@ namespace openpiv::core {
         /// \return true if \a is contains valid image data
         virtual bool open( std::istream& is ) = 0;
 
-        /// Extract an image from an opened stream;
-        /// may throw ImageLoaderException if there is an issue
-        virtual bool extract( size_t index, image& im ) = 0;
+        /// Extract an image from an opened stream; the format of
+        /// the resulting image is determined by the contents of the
+        /// file
+        /// \return the image, or an empty optional if \a index is
+        /// out of range or the file variant is unsupported
+        virtual std::optional<image> extract( size_t index ) = 0;
 
         /// Load the image from \a stream; this is a convenience method
         /// that combines open/extract for the first image found
-        /// may throw ImageLoaderException if there is an issue
-        virtual bool load( std::istream& is, image& im )
+        /// \return the image, or an empty optional on failure
+        virtual std::optional<image> load( std::istream& is )
         {
-            return open(is) && extract(0, im);
+            if ( !open( is ) )
+                return std::nullopt;
+            return extract( 0 );
         }
 
         /// Save the image to \a stream

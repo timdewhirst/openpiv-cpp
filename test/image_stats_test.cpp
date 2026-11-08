@@ -76,5 +76,4 @@ TEST_CASE("image_stats_test - find_image_range_requires_grey")
 {
     image im{ 8, 8, pixel_format::RGBA_U8 };
     REQUIRE_THROWS_AS( find_image_range( im ), std::runtime_error );
-    REQUIRE_THROWS_AS( find_image_range( image{} ), std::runtime_error );
 }

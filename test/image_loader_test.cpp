@@ -30,8 +30,9 @@ TEST_CASE("image_loader_test - tiff_loader_mono")
     REQUIRE(!!loader);
     REQUIRE(loader->name() == std::string("image/tiff") );
 
-    image im;
-    loader->load( is, im );
+    auto maybe{ loader->load( is ) };
+    REQUIRE( !!maybe );
+    image im{ std::move( *maybe ) };
 
     REQUIRE(im.width() == 511);
     REQUIRE(im.height() == 369);
@@ -49,8 +50,9 @@ TEST_CASE("image_loader_test - tiff_loader_rgb")
     REQUIRE(!!loader);
     REQUIRE(loader->name() == std::string("image/tiff"));
 
-    image im;
-    loader->load( is, im );
+    auto maybe{ loader->load( is ) };
+    REQUIRE( !!maybe );
+    image im{ std::move( *maybe ) };
 
     REQUIRE(im.width() == 511);
     REQUIRE(im.height() == 369);
@@ -72,8 +74,9 @@ TEST_CASE("image_loader_test - pnm_loader_load_p5")
     std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(ss) };
     REQUIRE(!!loader);
 
-    image im;
-    loader->load( ss, im );
+    auto maybe{ loader->load( ss ) };
+    REQUIRE( !!maybe );
+    image im{ std::move( *maybe ) };
 
     REQUIRE(im.width() == 300);
     REQUIRE(im.height() == 200);
@@ -100,8 +103,9 @@ TEST_CASE("image_loader_test - pnm_loader_load_p6")
     std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(ss) };
     REQUIRE(!!loader);
 
-    image im;
-    loader->load( ss, im );
+    auto maybe{ loader->load( ss ) };
+    REQUIRE( !!maybe );
+    image im{ std::move( *maybe ) };
 
     REQUIRE(im.width() == 100);
     REQUIRE(im.height() == 50);
@@ -121,7 +125,7 @@ TEST_CASE("image_loader_test - pnm_loader_load_p6")
     CHECK( matched );
 }
 
-TEST_CASE("image_loader_test - pnm_save_requires_data")
+TEST_CASE("image_loader_test - pnm_save_unsupported_format")
 {
     std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
     REQUIRE(!!writer);
@@ -130,9 +134,6 @@ TEST_CASE("image_loader_test - pnm_save_requires_data")
     image im{ 4, 4, pixel_format::YUV_U8 };
     std::stringstream ss;
     REQUIRE_THROWS_AS( writer->save( ss, im ), image_loader_exception );
-
-    // empty images are rejected
-    REQUIRE_THROWS_AS( writer->save( ss, image{} ), image_loader_exception );
 }
 
 TEST_CASE("image_loader_test - pnm_save_reload_p5")
@@ -149,8 +150,9 @@ TEST_CASE("image_loader_test - pnm_save_reload_p5")
     // read back; PNM stores 16-bit data so comes back as GREY_U16
     std::shared_ptr<image_loader> reader{ image_loader_registry::instance().find(ss) };
     REQUIRE(!!reader);
-    image rt;
-    reader->load( ss, rt );
+    auto maybe{ reader->load( ss ) };
+    REQUIRE( !!maybe );
+    image rt{ std::move( *maybe ) };
     REQUIRE(rt.format() == pixel_format::GREY_U16);
     CHECK( rt == convert( im, pixel_format::GREY_U16 ) );
 }
@@ -169,8 +171,9 @@ TEST_CASE("image_loader_test - pnm_save_reload_p6")
     // read back; alpha is dropped by the PNM file format
     std::shared_ptr<image_loader> reader{ image_loader_registry::instance().find(ss) };
     REQUIRE(!!reader);
-    image rt;
-    reader->load( ss, rt );
+    auto maybe{ reader->load( ss ) };
+    REQUIRE( !!maybe );
+    image rt{ std::move( *maybe ) };
     REQUIRE(rt.format() == pixel_format::RGB_U16);
 
     bool matched{ true };
@@ -193,8 +196,9 @@ TEST_CASE("image_loader_test - pnm_loader_save_files")
         REQUIRE(is.is_open());
         std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };
         REQUIRE(!!loader);
-        image im;
-        loader->load( is, im );
+        auto maybe{ loader->load( is ) };
+        REQUIRE( !!maybe );
+        image im{ std::move( *maybe ) };
         REQUIRE( save_to_file( "test-mono.pgm", im ) );
     }
 
@@ -203,8 +207,9 @@ TEST_CASE("image_loader_test - pnm_loader_save_files")
         REQUIRE(is.is_open());
         std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };
         REQUIRE(!!loader);
-        image im;
-        loader->load( is, im );
+        auto maybe{ loader->load( is ) };
+        REQUIRE( !!maybe );
+        image im{ std::move( *maybe ) };
         REQUIRE( save_to_file( "test-rgb.ppm", im ) );
     }
 }

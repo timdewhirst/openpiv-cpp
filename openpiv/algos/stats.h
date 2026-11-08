@@ -19,10 +19,6 @@ namespace openpiv::algos {
     inline std::tuple< double, double >
     find_image_range( const image& im )
     {
-        if ( !im.data() )
-            core::exception_builder<std::runtime_error>()
-                << "find_image_range: image is empty";
-
         if ( im.info().family != pixel_family::GREY )
             core::exception_builder<std::runtime_error>()
                 << "find_image_range requires a greyscale image: " << im.format();

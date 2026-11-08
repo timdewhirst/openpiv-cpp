@@ -83,12 +83,12 @@ namespace openpiv::core {
 
         /// \a is must be placed after header data; the format of the
         /// resulting image is determined by the PNM type and depth
-        void extract( image& im ) const
+        image extract() const
         {
             if ( type == 5 )
             {
                 // binary greyscale
-                im = image( width, height, depth > 255 ? pixel_format::GREY_U16 : pixel_format::GREY_U8 );
+                image im( width, height, depth > 255 ? pixel_format::GREY_U16 : pixel_format::GREY_U8 );
 
                 for ( uint32_t h = 0; !is.eof() && h < height; ++h )
                 {
@@ -102,11 +102,13 @@ namespace openpiv::core {
                             line[w] = betos<__BYTE_ORDER__>( line[w] );
                     }
                 }
+
+                return im;
             }
             else
             {
                 // binary RGB
-                im = image( width, height, depth > 255 ? pixel_format::RGB_U16 : pixel_format::RGB_U8 );
+                image im( width, height, depth > 255 ? pixel_format::RGB_U16 : pixel_format::RGB_U8 );
 
                 for ( uint32_t h = 0; !is.eof() && h < height; ++h )
                 {
@@ -119,6 +121,8 @@ namespace openpiv::core {
                             line[w] = betos<__BYTE_ORDER__>( line[w] );
                     }
                 }
+
+                return im;
             }
         }
     };
@@ -207,13 +211,12 @@ namespace openpiv::core {
         return true;
     }
 
-    bool pnm_image_loader::extract( size_t, image& im )
+    std::optional<image> pnm_image_loader::extract( size_t )
     {
         if ( !impl_ || !impl_->valid )
-            return false;
+            return std::nullopt;
 
-        impl_->extract( im );
-        return true;
+        return impl_->extract();
     }
 
     namespace {

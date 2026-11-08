@@ -145,7 +145,6 @@ void add_image(py::module& m)
                 shape,
                 strides );
         } )
-        .def( py::init<>() )
         .def( py::init<uint32_t, uint32_t, pixel_format>() )
         .def( py::init<const core::size&, pixel_format>() )
         .def( py::init<const core::rect&, pixel_format>() )

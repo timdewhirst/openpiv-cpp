@@ -39,10 +39,6 @@ TEST_CASE("image_utils_test - fill")
         REQUIRE( p.b == 77 );
         REQUIRE( p.a == 255 );
     }
-
-    // empty images are a no-op
-    image empty;
-    CHECK_NOTHROW( fill( empty, 1.0 ) );
 }
 
 TEST_CASE("image_utils_test - fill_generator")
@@ -79,10 +75,6 @@ TEST_CASE("image_utils_test - apply")
     // check result through the grey accessor
     for ( image::index_t i = 0; i < im.pixel_count(); ++i )
         REQUIRE( im.at<g_8>( i ) == g_8( static_cast<uint8_t>( i ) ) );
-
-    // empty images are a no-op
-    image empty;
-    CHECK_NOTHROW( apply( empty, []( image::index_t, auto& v ){ return v; } ) );
 }
 
 TEST_CASE("image_utils_test - pixel_sum")
@@ -98,9 +90,6 @@ TEST_CASE("image_utils_test - pixel_sum")
 
     // non-grey images are rejected
     REQUIRE_THROWS_AS( pixel_sum( image{ 4, 4, pixel_format::RGBA_U8 } ), std::runtime_error );
-
-    // empty image is zero
-    REQUIRE( pixel_sum( image{} ) == 0.0 );
 }
 
 TEST_CASE("image_utils_test - transpose")

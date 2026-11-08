@@ -40,7 +40,11 @@ namespace openpiv::algos {
         {
             image output;
             image temp;
-            std::vector< std::complex<double> > buffer;
+
+            data_t( const core::size& s )
+                : output( s, pixel_format::COMPLEX_F64 )
+                , temp( s, pixel_format::COMPLEX_F64 )
+            {}
         };
 
         /// helpers to allow TLS for intermediate storage
@@ -63,10 +67,7 @@ namespace openpiv::algos {
                     return data;
             }
 
-            data_t data;
-            data.output = image( size_, pixel_format::COMPLEX_F64 );
-            data.temp = image( size_, pixel_format::COMPLEX_F64 );
-            auto& [fft, result] = storage().emplace_back(self, std::move(data));
+            auto& [fft, result] = storage().emplace_back( self, data_t{ size_ } );
 
             return result;
         }

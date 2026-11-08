@@ -53,7 +53,9 @@ public:
     }
 
     // ctor
-    image() = default;
+    /// images are fixed in geometry and format at construction;
+    /// there is no empty image
+    image() = delete;
     image( const image& ) = default;
     image( image&& ) = default;
     image& operator=( const image& ) = default;
@@ -87,17 +89,16 @@ public:
     /// construct a sub-image sharing the underlying data; \a r is in
     /// the local coordinates of this image and must be wholly
     /// contained within it; the result has the same format and row
-    /// pitch as this image and its rect() is posisioned relative to
+    /// pitch as this image and its rect() is positioned relative to
     /// this image's rect()
     image sub_image( const core::rect& r ) const
     {
         require_sub_rect( r );
 
-        image result;
-        result.r_ = { { r_.left() + r.left(), r_.bottom() + r.bottom() }, r.size() };
-        result.fmt_ = fmt_;
-        result.pitch_ = pitch_;
-        result.data_ = { data_, data_.get() + offset_of( r ) };
+        image result{ { { r_.left() + r.left(), r_.bottom() + r.bottom() }, r.size() },
+                      fmt_,
+                      pitch_,
+                      { data_, data_.get() + offset_of( r ) } };
         return result;
     }
 
@@ -132,9 +133,6 @@ public:
         if ( r_ != rhs.r_ || fmt_ != rhs.fmt_ )
             return false;
 
-        if ( !data_ || !rhs.data_ )
-            return !data_ && !rhs.data_;
-
         // compare rows: pitch may differ between shared views
         const size_t row_bytes{ static_cast<size_t>( r_.width() ) * info().bytes_per_pixel };
         const byte_t* l{ data_.get() };
@@ -153,7 +151,7 @@ public:
     PixelT& at( index_t i )
     {
         check_pixel_type<PixelT>();
-        if ( !data_ || i >= pixel_count() )
+        if ( i >= pixel_count() )
             core::exception_builder<std::out_of_range>()
                 << "pixel index out of range: " << i << ", max is: " << pixel_count();
 
@@ -171,7 +169,7 @@ public:
     PixelT& at( const point2<uint32_t>& xy )
     {
         check_pixel_type<PixelT>();
-        if ( !data_ || xy[0] >= width() || xy[1] >= height() )
+        if ( xy[0] >= width() || xy[1] >= height() )
             core::exception_builder<std::out_of_range>()
                 << "point outside of image: [" << xy[0] << ", " << xy[1] << "], image is: "
                 << width() << "x" << height();
@@ -201,8 +199,6 @@ public:
     /// raw data by line
     inline byte_t* line( size_t i )
     {
-        if ( !data_ )
-            core::exception_builder<std::runtime_error>() << "image is empty";
         if ( i > r_.height() )
             core::exception_builder<std::range_error>()
                 << "line out of range (" << i << ", max is: " << r_.height() << ")";
@@ -243,6 +239,15 @@ public:
     }
 
 private:
+    /// construct an image over existing storage; for internal use
+    /// (sub_image) - does not allocate
+    image( const core::rect& r, pixel_format fmt, size_t pitch, std::shared_ptr<byte_t> data )
+        : r_( r )
+        , fmt_( fmt )
+        , pitch_( pitch )
+        , data_( std::move( data ) )
+    {}
+
     /// byte offset of the first pixel of \a r (local coordinates)
     size_t offset_of( const core::rect& r ) const
     {
@@ -253,9 +258,6 @@ private:
     /// ensure \a r (local coordinates) is valid for sub_image/extract
     void require_sub_rect( const core::rect& r ) const
     {
-        if ( !data_ )
-            core::exception_builder<std::runtime_error>() << "image is empty";
-
         const core::rect bounds{ core::rect::from_size( r_.size() ) };
         if ( !bounds.contains( r ) )
             core::exception_builder<std::out_of_range>()
@@ -363,9 +365,6 @@ inline image convert( const image& src,
     if ( to == pixel_format::UNKNOWN )
         core::exception_builder<std::invalid_argument>()
             << "destination format must be known: " << to;
-
-    if ( !src.data() )
-        core::exception_builder<std::runtime_error>() << "source image is empty";
 
     if ( to == src.format() )
         return src.extract( core::rect::from_size( src.size() ), allocator );

@@ -69,8 +69,6 @@ namespace detail {
 /// image's pixel format
 inline image& fill( image& im, double v )
 {
-    if ( !im.data() )
-        return im;
 
     dispatch_pixel_type( im.format(), [&im, v]( auto tag )
         {
@@ -87,8 +85,6 @@ image& fill( image& im, GeneratorT g )
     static_assert( std::is_invocable_v< GeneratorT, uint32_t, uint32_t >,
                    "fill generator must be invocable as g(uint32_t w, uint32_t h)" );
 
-    if ( !im.data() )
-        return im;
 
     dispatch_pixel_type( im.format(), [&im, &g]( auto tag )
         {
@@ -102,8 +98,6 @@ image& fill( image& im, GeneratorT g )
 template <typename OpT>
 image& apply( image& im, OpT op )
 {
-    if ( !im.data() )
-        return im;
 
     dispatch_pixel_type( im.format(), [&im, &op]( auto tag )
         {
@@ -116,8 +110,6 @@ image& apply( image& im, OpT op )
 /// are accumulated exactly
 inline double pixel_sum( const image& im )
 {
-    if ( !im.data() )
-        return 0.0;
 
     if ( im.info().family != pixel_family::GREY )
         core::exception_builder<std::runtime_error>()
@@ -165,8 +157,6 @@ inline image& transpose( const image& in, image& out )
                "dimensions: " << in.format() << " " << in.size() << ", "
             << out.format() << " " << out.size();
 
-    if ( !in.data() )
-        return out;
 
     const uint8_t bpp{ in.info().bytes_per_pixel };
 
@@ -208,8 +198,6 @@ inline image& swap_quadrants( image& im )
         core::exception_builder<std::runtime_error>()
             << "swap_quadrants requires even dimensions: " << im.size();
 
-    if ( !im.data() )
-        return im;
 
     const uint8_t bpp{ im.info().bytes_per_pixel };
 
@@ -234,8 +222,6 @@ inline image& swap_quadrants( image& im )
 /// the size of each peak can be adjusted by setting \a peak_radius
 inline std::vector<image> find_peaks( const image& im, uint16_t num_peaks, uint32_t peak_radius )
 {
-    if ( !im.data() )
-        return {};
 
     if ( im.info().family != pixel_family::GREY )
         core::exception_builder<std::runtime_error>()
@@ -303,10 +289,6 @@ inline point2<double> fit_simple_gaussian( const image& im )
         core::exception_builder<std::runtime_error>()
             << "fit_simple_gaussian: input must be 3x3: " << im.size();
 
-    if ( !im.data() )
-        core::exception_builder<std::runtime_error>()
-            << "fit_simple_gaussian: input is empty";
-
     if ( im.info().family != pixel_family::GREY )
         core::exception_builder<std::runtime_error>()
             << "fit_simple_gaussian requires a greyscale image: " << im.format();
@@ -351,8 +333,6 @@ inline point2<double> fit_simple_gaussian( const image& im )
 /// same depth
 inline std::tuple<image, image, image, image> split_to_channels( const image& im )
 {
-    if ( !im.data() )
-        core::exception_builder<std::runtime_error>() << "split_to_channels: input is empty";
 
     if ( im.info().family != pixel_family::RGBA )
         core::exception_builder<std::runtime_error>()
@@ -394,8 +374,6 @@ inline std::tuple<image, image, image, image> split_to_channels( const image& im
 /// same depth
 inline std::tuple<image, image> split_complex_to_channels( const image& im )
 {
-    if ( !im.data() )
-        core::exception_builder<std::runtime_error>() << "split_complex_to_channels: input is empty";
 
     if ( im.info().family != pixel_family::COMPLEX )
         core::exception_builder<std::runtime_error>()
@@ -519,8 +497,6 @@ inline image join_complex_from_channels( const image& real_im, const image& imag
 /// of the same depth (note: no abs, use convert() for magnitude)
 inline image real( const image& im )
 {
-    if ( !im.data() )
-        core::exception_builder<std::runtime_error>() << "real: input is empty";
 
     if ( im.info().family != pixel_family::COMPLEX )
         core::exception_builder<std::runtime_error>()

@@ -41,6 +41,12 @@ namespace openpiv::algos {
             image output;
             std::vector< c_f > fft_buffer;
             image temp;
+
+            data_t( const core::size& s )
+                : output( s, pixel_format::COMPLEX_F64 )
+                , fft_buffer( maximal_size( s ).width() )
+                , temp( transpose( s ), pixel_format::COMPLEX_F64 )
+            {}
         };
 
         /// helpers to allow TLS for intermediate storage
@@ -63,12 +69,7 @@ namespace openpiv::algos {
                     return data;
             }
 
-            data_t data;
-            size_t N{ maximal_size( size_ ).width() };
-            data.output = image( size_, pixel_format::COMPLEX_F64 );
-            data.temp = image( transpose(size_), pixel_format::COMPLEX_F64 );
-            data.fft_buffer.resize( N );
-            auto& [fft, result] = storage().emplace_back(self, std::move(data));
+            auto& [fft, result] = storage().emplace_back( self, data_t{ size_ } );
 
             return result;
         }

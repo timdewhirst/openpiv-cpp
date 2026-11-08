@@ -21,7 +21,7 @@ namespace openpiv::core {
         size_t num_images() const override;
 
         bool open( std::istream& is ) override;
-        bool extract( size_t index, image& im ) override;
+        std::optional<image> extract( size_t index ) override;
 
         void save( std::ostream&, const image& im ) const override;
 

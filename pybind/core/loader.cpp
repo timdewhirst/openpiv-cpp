@@ -41,9 +41,9 @@ void add_loader(py::module& m)
                std::vector<image> images;
                for ( size_t index = 0; index < loader->num_images(); ++index )
                {
-                   image im;
-                   loader->extract( index, im );
-                   images.push_back( std::move( im ) );
+                   auto im{ loader->extract( index ) };
+                   if ( im )
+                       images.push_back( std::move( *im ) );
                }
                return images;
            });
