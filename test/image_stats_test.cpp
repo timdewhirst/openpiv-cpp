@@ -8,7 +8,7 @@
 #include "test_utils.h"
 
 // to be tested
-#include "core/image_utils2.h"
+#include "core/image_utils.h"
 #include "algos/stats.h"
 
 using namespace openpiv;

@@ -14,7 +14,7 @@
 // to be tested
 #include "algos/fft.h"
 #include "algos/stats.h"
-#include "core/image_utils2.h"
+#include "core/image_utils.h"
 #include "loaders/image_loader.h"
 
 using namespace std::string_literals;

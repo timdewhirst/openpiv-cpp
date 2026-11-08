@@ -2,7 +2,7 @@
 #include <benchmark/benchmark.h>
 
 // openpiv
-#include "core/image_utils2.h"
+#include "core/image_utils.h"
 #include "loaders/image_loader.h"
 
 using namespace openpiv;

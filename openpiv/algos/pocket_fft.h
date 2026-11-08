@@ -18,8 +18,8 @@
 #include "algos/fft_common.h"
 #include "core/enum_helper.h"
 #include "core/exception_builder.h"
-#include "core/image2.h"
-#include "core/image_utils2.h"
+#include "core/image.h"
+#include "core/image_utils.h"
 #include "core/pixel_format.h"
 #include "core/util.h"
 

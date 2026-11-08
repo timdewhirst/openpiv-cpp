@@ -7,7 +7,7 @@
 
 // local
 #include "core/exception_builder.h"
-#include "core/image2.h"
+#include "core/image.h"
 #include "core/pixel_format.h"
 
 namespace openpiv::algos {

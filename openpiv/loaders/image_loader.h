@@ -10,7 +10,7 @@
 #include <type_traits>
 
 // local
-#include "core/image2.h"
+#include "core/image.h"
 
 namespace openpiv::core {
 

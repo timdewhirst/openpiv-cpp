@@ -9,7 +9,7 @@
 // openpiv
 #include "loaders/image_loader.h"
 #include "core/enumerate.h"
-#include "core/image_utils2.h"
+#include "core/image_utils.h"
 #include "core/log.h"
 #include "core/stream_utils.h"
 #include "algos/stats.h"

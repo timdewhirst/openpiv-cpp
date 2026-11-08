@@ -12,7 +12,7 @@
 
 // local
 #include "core/util.h"
-#include "core/image2.h"
+#include "core/image.h"
 #include "core/log.h"
 #include "core/enum_helper.h"
 

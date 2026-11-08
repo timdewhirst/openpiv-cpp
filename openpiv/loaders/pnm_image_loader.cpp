@@ -7,7 +7,7 @@
 #include <vector>
 
 // local
-#include "core/image2.h"
+#include "core/image.h"
 #include "core/log.h"
 #include "core/util.h"
 #include "algos/stats.h"

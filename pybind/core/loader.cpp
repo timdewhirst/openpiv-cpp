@@ -1,6 +1,6 @@
 // openpiv
 #include "core/exception_builder.h"
-#include "core/image2.h"
+#include "core/image.h"
 #include "core/util.h"
 #include "loaders/image_loader.h"
 

@@ -12,7 +12,7 @@
 #include <vector>
 
 // to be tested
-#include "core/image2.h"
+#include "core/image.h"
 
 using namespace openpiv;
 using namespace openpiv::core;

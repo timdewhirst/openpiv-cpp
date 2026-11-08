@@ -10,7 +10,7 @@
 #include <sstream>
 
 // to be tested
-#include "core/image_utils2.h"
+#include "core/image_utils.h"
 
 using namespace openpiv;
 using namespace openpiv::core;

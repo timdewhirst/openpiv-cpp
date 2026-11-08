@@ -6,7 +6,7 @@
 #include <string>
 
 // to be tested
-#include "core/image2.h"
+#include "core/image.h"
 #include "loaders/image_loader.h"
 
 using namespace openpiv;
