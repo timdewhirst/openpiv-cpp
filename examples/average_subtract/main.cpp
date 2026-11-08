@@ -1,4 +1,3 @@
-
 // std
 #include <cinttypes>
 #include <fstream>
@@ -10,8 +9,7 @@
 // openpiv
 #include "loaders/image_loader.h"
 #include "core/enumerate.h"
-#include "core/image.h"
-#include "core/image_utils.h"
+#include "core/image_utils2.h"
 #include "core/log.h"
 #include "core/stream_utils.h"
 #include "algos/stats.h"
@@ -19,7 +17,7 @@
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
 
-core::image_g_f load_from_file(const std::string& filename)
+core::image load_from_file(const std::string& filename)
 {
     try {
         std::ifstream is(filename, std::ios::binary);
@@ -30,9 +28,11 @@ core::image_g_f load_from_file(const std::string& filename)
         if ( !loader )
             core::exception_builder<std::runtime_error>() << "failed to find loader for " << filename;
 
-        core::image_g_f image;
+        core::image image;
         loader->load( is, image );
-        return image;
+
+        // process in double precision
+        return core::convert( image, core::pixel_format::GREY_F64 );
     }
     catch ( std::exception& e )
     {
@@ -97,13 +97,16 @@ int main( int argc, char* argv[] )
 
     // process: find average
     core::size s;
-    core::image_g_f avg;
+    core::image avg;
     size_t processed = 0;
 
     try {
         auto image = load_from_file(input_files[0]);
-        s = image.size();
-        avg.resize(s);
+        if ( image.format() != core::pixel_format::UNKNOWN )
+        {
+            s = image.size();
+            avg = core::image( s, core::pixel_format::GREY_F64 );
+        }
     }
     catch (std::exception& e)
     {
@@ -115,7 +118,14 @@ int main( int argc, char* argv[] )
     {
         try {
             auto image = load_from_file(input_files[i]);
-            avg = avg + image;
+            if ( image.format() == core::pixel_format::UNKNOWN || image.size() != s )
+            {
+                logger::error("image has invalid size: {}", input_files[i]);
+                continue;
+            }
+
+            for ( core::image::index_t j=0; j<avg.pixel_count(); ++j )
+                avg.at<core::g_f>(j) = core::g_f( avg.at<core::g_f>(j) + image.at<core::g_f>(j) );
             ++processed;
         }
         catch ( std::exception& e )
@@ -131,7 +141,9 @@ int main( int argc, char* argv[] )
     }
 
     // normalize
-    avg = avg / core::g_f{processed};
+    const double norm{ 1.0 / processed };
+    for ( core::image::index_t j=0; j<avg.pixel_count(); ++j )
+        avg.at<core::g_f>(j) = core::g_f( avg.at<core::g_f>(j) * norm );
 
     logger::info("found average; processed {} image files", processed);
 
@@ -148,7 +160,12 @@ int main( int argc, char* argv[] )
     {
         try {
             auto image = load_from_file(input_files[i]);
-            image = image - avg;
+            if ( image.format() == core::pixel_format::UNKNOWN || image.size() != s )
+                continue;
+
+            for ( core::image::index_t j=0; j<image.pixel_count(); ++j )
+                image.at<core::g_f>(j) = image.at<core::g_f>(j) - avg.at<core::g_f>(j);
+
             std::fstream os(
                 input_files[i] + ".avg_sub.pnm",
                 std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
@@ -159,5 +176,4 @@ int main( int argc, char* argv[] )
     }
 
     return 0;
-};
-
+}

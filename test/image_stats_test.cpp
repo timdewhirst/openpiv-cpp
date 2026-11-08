@@ -8,16 +8,17 @@
 #include "test_utils.h"
 
 // to be tested
-#include "core/pixel_types.h"
+#include "core/image_utils2.h"
 #include "algos/stats.h"
 
+using namespace openpiv;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 
 TEST_CASE("image_stats_test - find_image_range_uniform_test")
 {
-    image_g_8 im; g_8 v;
-    std::tie( im, v ) = create_and_fill( {200, 200}, 0_g8 );
+    image im{ 200, 200, pixel_format::GREY_U8 };
+    fill( im, 0.0 );
 
     auto [min, max] = find_image_range( im );
     REQUIRE(min == 0);
@@ -26,10 +27,10 @@ TEST_CASE("image_stats_test - find_image_range_uniform_test")
 
 TEST_CASE("image_stats_test - find_image_range_max_test")
 {
-    image_g_8 im; g_8 v;
-    std::tie( im, v ) = create_and_fill( {200, 200}, 0_g8 );
+    image im{ 200, 200, pixel_format::GREY_U8 };
+    fill( im, 0.0 );
 
-    im[{ 50, 50 }] = 255;
+    im.at<g_8>( point2<uint32_t>( 50, 50 ) ) = g_8( 255 );
     auto [min, max] = find_image_range( im );
     REQUIRE(min == 0);
     REQUIRE(max == 255);
@@ -37,10 +38,10 @@ TEST_CASE("image_stats_test - find_image_range_max_test")
 
 TEST_CASE("image_stats_test - find_image_range_min_test")
 {
-    image_g_8 im; g_8 v;
-    std::tie( im, v ) = create_and_fill( {200, 200}, 255_g8 );
+    image im{ 200, 200, pixel_format::GREY_U8 };
+    fill( im, 255.0 );
 
-    im[{ 50, 50 }] = 0;
+    im.at<g_8>( point2<uint32_t>( 50, 50 ) ) = g_8( 0 );
     auto [min, max] = find_image_range( im );
     REQUIRE(min == 0);
     REQUIRE(max == 255);
@@ -48,13 +49,32 @@ TEST_CASE("image_stats_test - find_image_range_min_test")
 
 TEST_CASE("image_stats_test - find_image_range_min_max_test")
 {
-    image_g_8 im; g_8 v;
-    std::tie( im, v ) = create_and_fill( {200, 200}, 128_g8 );
+    image im{ 200, 200, pixel_format::GREY_U8 };
+    fill( im, 128.0 );
 
-    im[{ 50, 50 }] = 0;
-    im[{ 150, 150 }] = 255;
+    im.at<g_8>( point2<uint32_t>( 50, 50 ) ) = g_8( 0 );
+    im.at<g_8>( point2<uint32_t>( 150, 150 ) ) = g_8( 255 );
     auto [min, max] = find_image_range( im );
     REQUIRE(min == 0);
     REQUIRE(max == 255);
 }
 
+TEST_CASE("image_stats_test - find_image_range_sub_image")
+{
+    image im{ 200, 200, pixel_format::GREY_F64 };
+    fill( im, 10.0 );
+
+    image sub = im.sub_image( rect{ { 10, 10 }, size{ 20, 20 } } );
+    fill( sub, 20.0 );
+
+    auto [min, max] = find_image_range( sub );
+    REQUIRE(min == 20);
+    REQUIRE(max == 20);
+}
+
+TEST_CASE("image_stats_test - find_image_range_requires_grey")
+{
+    image im{ 8, 8, pixel_format::RGBA_U8 };
+    REQUIRE_THROWS_AS( find_image_range( im ), std::runtime_error );
+    REQUIRE_THROWS_AS( find_image_range( image{} ), std::runtime_error );
+}

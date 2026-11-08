@@ -6,8 +6,10 @@
 #include <ostream>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 // local
+#include "core/exception_builder.h"
 #include "core/format_utils.h"
 #include "core/pixel_types.h"
 
@@ -89,6 +91,37 @@ constexpr uint8_t family_channels( pixel_family f )
         case pixel_family::YUVA: return 4;
         case pixel_family::COMPLEX: return 2;
         default: return 0;
+    }
+}
+
+/// greyscale format of a given depth
+constexpr pixel_format grey_format_for_depth( pixel_depth d )
+{
+    switch ( d )
+    {
+        case pixel_depth::U8: return pixel_format::GREY_U8;
+        case pixel_depth::U16: return pixel_format::GREY_U16;
+        case pixel_depth::U32: return pixel_format::GREY_U32;
+        case pixel_depth::F32: return pixel_format::GREY_F32;
+        case pixel_depth::F64: return pixel_format::GREY_F64;
+        default: return pixel_format::UNKNOWN;
+    }
+}
+
+/// complex format of a given depth; note that integral complex
+/// pixel types are signed (complex<int8_t> etc.) while the
+/// corresponding greyscale types are unsigned - use this mapping
+/// when converting between complex and grey depths
+constexpr pixel_format complex_format_for_depth( pixel_depth d )
+{
+    switch ( d )
+    {
+        case pixel_depth::U8: return pixel_format::COMPLEX_U8;
+        case pixel_depth::U16: return pixel_format::COMPLEX_U16;
+        case pixel_depth::U32: return pixel_format::COMPLEX_U32;
+        case pixel_depth::F32: return pixel_format::COMPLEX_F32;
+        case pixel_depth::F64: return pixel_format::COMPLEX_F64;
+        default: return pixel_format::UNKNOWN;
     }
 }
 
@@ -246,6 +279,96 @@ using pixel_type_for_t = typename pixel_type_for<F>::type;
 inline std::ostream& operator<<( std::ostream& os, pixel_format f )
 {
     return os << format_info( f ).name;
+}
+
+namespace detail {
+
+    /// tag carrying a compile-time pixel type
+    template < typename T >
+    struct pixel_tag
+    {
+        using type = T;
+    };
+
+}
+
+/// invoke \a fn with a pixel_tag for the compile-time fundamental
+/// type matching \a d; useful for dispatching on runtime depths to
+/// templated implementations
+template < typename F >
+decltype(auto) dispatch_pixel_depth( pixel_depth d, F&& fn )
+{
+    switch ( d )
+    {
+#define OPENPIV_DEPTH_TAG_CASE( DEPTH, TYPE )                                         \
+    case pixel_depth::DEPTH:                                                          \
+        return fn( detail::pixel_tag< TYPE >{} );
+
+        OPENPIV_DEPTH_TAG_CASE( U8,  uint8_t )
+        OPENPIV_DEPTH_TAG_CASE( U16, uint16_t )
+        OPENPIV_DEPTH_TAG_CASE( U32, uint32_t )
+        OPENPIV_DEPTH_TAG_CASE( F32, float )
+        OPENPIV_DEPTH_TAG_CASE( F64, double )
+
+#undef OPENPIV_DEPTH_TAG_CASE
+
+        default:
+            core::exception_builder<std::runtime_error>()
+                << "unknown pixel depth: " << format_info( pixel_format::UNKNOWN ).name;
+            std::unreachable();
+    }
+}
+
+/// invoke \a fn with a pixel_tag for the compile-time pixel type
+/// matching \a f; useful for dispatching on runtime formats to
+/// templated implementations
+template < typename F >
+decltype(auto) dispatch_pixel_type( pixel_format f, F&& fn )
+{
+    switch ( f )
+    {
+#define OPENPIV_PIXEL_TAG_CASE( FMT, PIXELT )                                         \
+    case pixel_format::FMT:                                                           \
+        return fn( detail::pixel_tag< PIXELT >{} );
+
+        OPENPIV_PIXEL_TAG_CASE( GREY_U8,   g_8 )
+        OPENPIV_PIXEL_TAG_CASE( GREY_U16,  g_16 )
+        OPENPIV_PIXEL_TAG_CASE( GREY_U32,  g_32 )
+        OPENPIV_PIXEL_TAG_CASE( GREY_F32,  g_f32 )
+        OPENPIV_PIXEL_TAG_CASE( GREY_F64,  g_f )
+        OPENPIV_PIXEL_TAG_CASE( RGB_U8,    rgb_8 )
+        OPENPIV_PIXEL_TAG_CASE( RGB_U16,   rgb_16 )
+        OPENPIV_PIXEL_TAG_CASE( RGB_U32,   rgb_32 )
+        OPENPIV_PIXEL_TAG_CASE( RGB_F32,   rgb_f32 )
+        OPENPIV_PIXEL_TAG_CASE( RGB_F64,   rgb_f )
+        OPENPIV_PIXEL_TAG_CASE( RGBA_U8,   rgba_8 )
+        OPENPIV_PIXEL_TAG_CASE( RGBA_U16,  rgba_16 )
+        OPENPIV_PIXEL_TAG_CASE( RGBA_U32,  rgba_32 )
+        OPENPIV_PIXEL_TAG_CASE( RGBA_F32,  rgba_f32 )
+        OPENPIV_PIXEL_TAG_CASE( RGBA_F64,  rgba_f )
+        OPENPIV_PIXEL_TAG_CASE( YUV_U8,    yuv_8 )
+        OPENPIV_PIXEL_TAG_CASE( YUV_U16,   yuv_16 )
+        OPENPIV_PIXEL_TAG_CASE( YUV_U32,   yuv_32 )
+        OPENPIV_PIXEL_TAG_CASE( YUV_F32,   yuv_f32 )
+        OPENPIV_PIXEL_TAG_CASE( YUV_F64,   yuv_f )
+        OPENPIV_PIXEL_TAG_CASE( YUVA_U8,   yuva_8 )
+        OPENPIV_PIXEL_TAG_CASE( YUVA_U16,  yuva_16 )
+        OPENPIV_PIXEL_TAG_CASE( YUVA_U32,  yuva_32 )
+        OPENPIV_PIXEL_TAG_CASE( YUVA_F32,  yuva_f32 )
+        OPENPIV_PIXEL_TAG_CASE( YUVA_F64,  yuva_f )
+        OPENPIV_PIXEL_TAG_CASE( COMPLEX_U8,   c_8 )
+        OPENPIV_PIXEL_TAG_CASE( COMPLEX_U16,  c_16 )
+        OPENPIV_PIXEL_TAG_CASE( COMPLEX_U32,  c_32 )
+        OPENPIV_PIXEL_TAG_CASE( COMPLEX_F32,  c_f32 )
+        OPENPIV_PIXEL_TAG_CASE( COMPLEX_F64,  c_f )
+
+#undef OPENPIV_PIXEL_TAG_CASE
+
+        default:
+            core::exception_builder<std::runtime_error>()
+                << "unknown pixel format: " << f;
+            std::unreachable();
+    }
 }
 
 }

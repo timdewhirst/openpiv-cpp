@@ -1,34 +1,51 @@
-
 #pragma once
 
 // std
+#include <algorithm>
+#include <limits>
 #include <tuple>
 
 // local
-#include "core/image.h"
-#include "core/image_type_traits.h"
+#include "core/exception_builder.h"
+#include "core/image2.h"
+#include "core/pixel_format.h"
 
 namespace openpiv::algos {
 
     using namespace core;
 
-    template < template<typename> class ImageT,
-               typename ContainedT,
-               typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-               >
-    std::tuple< ContainedT, ContainedT >
-    find_image_range( const ImageT<ContainedT>& im )
+    /// find the minimum and maximum pixel values of a greyscale
+    /// image
+    inline std::tuple< double, double >
+    find_image_range( const image& im )
     {
-        ContainedT min, max;
-        auto p = std::cbegin( im );
-        auto e = std::cend( im );
-        min = max = *p++;
-        while ( p != e )
-        {
-            min = *p < min ? *p : min;
-            max = *p > max ? *p : max;
-            ++p;
-        }
+        if ( !im.data() )
+            core::exception_builder<std::runtime_error>()
+                << "find_image_range: image is empty";
+
+        if ( im.info().family != pixel_family::GREY )
+            core::exception_builder<std::runtime_error>()
+                << "find_image_range requires a greyscale image: " << im.format();
+
+        double min{ std::numeric_limits<double>::max() };
+        double max{ std::numeric_limits<double>::lowest() };
+
+        dispatch_pixel_depth(
+            im.info().depth,
+            [&im, &min, &max]( auto tag )
+            {
+                using V = typename decltype( tag )::type;
+                for ( uint32_t h = 0; h < im.height(); ++h )
+                {
+                    const V* p{ reinterpret_cast<const V*>( im.line( h ) ) };
+                    for ( uint32_t w = 0; w < im.width(); ++w, ++p )
+                    {
+                        const double value{ static_cast<double>( *p ) };
+                        min = std::min( min, value );
+                        max = std::max( max, value );
+                    }
+                }
+            } );
 
         return std::make_tuple( min, max );
     }

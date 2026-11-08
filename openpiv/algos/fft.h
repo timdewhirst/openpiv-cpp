@@ -13,9 +13,9 @@
 #include "algos/fft_common.h"
 #include "core/enum_helper.h"
 #include "core/exception_builder.h"
-#include "core/image.h"
-#include "core/image_utils.h"
-#include "core/pixel_types.h"
+#include "core/image2.h"
+#include "core/image_utils2.h"
+#include "core/pixel_format.h"
 #include "core/util.h"
 
 namespace openpiv::algos {
@@ -34,12 +34,13 @@ namespace openpiv::algos {
         const scaling_map_t forward_scaling_;
         const scaling_map_t reverse_scaling_;
 
-        /// storage for intermediate data
+        /// storage for intermediate data; images are complex
+        /// floating point
         struct data_t
         {
-            image_c_f output;
+            image output;
             std::vector< c_f > fft_buffer;
-            image_c_f temp;
+            image temp;
         };
 
         /// helpers to allow TLS for intermediate storage
@@ -50,7 +51,7 @@ namespace openpiv::algos {
             return static_data;
         }
 
-        /// \fn cache contains a per-thread, per-instance copy of data
+        /// cache contains a per-thread, per-instance copy of data
         /// that is lazily initialized; this allows a single instance
         /// of FFT to be called from multiple threads without locking
         data_t& cache() const
@@ -64,12 +65,96 @@ namespace openpiv::algos {
 
             data_t data;
             size_t N{ maximal_size( size_ ).width() };
-            data.output.resize( size_ );
-            data.temp.resize( transpose(size_) );
+            data.output = image( size_, pixel_format::COMPLEX_F64 );
+            data.temp = image( transpose(size_), pixel_format::COMPLEX_F64 );
             data.fft_buffer.resize( N );
             auto& [fft, result] = storage().emplace_back(self, std::move(data));
 
             return result;
+        }
+
+        /// fill \a out (complex floating point) from \a in; \a in
+        /// may be any greyscale or complex image
+        void to_complex( const image& in, image& out ) const
+        {
+            if ( !in.info().is_mono && in.info().family != pixel_family::COMPLEX )
+                core::exception_builder<std::runtime_error>()
+                    << "transform requires a mono (greyscale or complex) image: " << in.format();
+
+            const pixel_format_info& info{ in.info() };
+            dispatch_pixel_type(
+                in.format(),
+                [&in, &out, &info]( auto tag )
+                {
+                    using FromT = typename decltype( tag )::type;
+                    using ToT = c_f;
+                    if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
+                    {
+                        for ( uint32_t h = 0; h < in.height(); ++h )
+                        {
+                            const FromT* s{ reinterpret_cast<const FromT*>( in.line( h ) ) };
+                            ToT* d{ reinterpret_cast<ToT*>( out.line( h ) ) };
+                            for ( uint32_t w = 0; w < in.width(); ++w )
+                                convert( *s++, *d++ );
+                        }
+                    }
+                    else
+                    {
+                        core::exception_builder<std::runtime_error>()
+                            << "no conversion to complex for format: " << in.format();
+                    }
+                } );
+        }
+
+        /// fill out (complex floating point) with (first, second)
+        /// from two real mono images
+        void join_to_complex( const image& a, const image& b, image& out ) const
+        {
+            const pixel_format_info& ainfo{ a.info() };
+            const pixel_format_info& binfo{ b.info() };
+            if ( !ainfo.is_mono || !binfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "transform_real requires greyscale images: " << a.format() << ", " << b.format();
+
+            dispatch_pixel_depth(
+                ainfo.depth,
+                [&]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    for ( uint32_t h = 0; h < a.height(); ++h )
+                    {
+                        const V* pa{ reinterpret_cast<const V*>( a.line( h ) ) };
+                        const V* pb{ reinterpret_cast<const V*>( b.line( h ) ) };
+                        c_f* po{ reinterpret_cast<c_f*>( out.line( h ) ) };
+                        for ( uint32_t w = 0; w < a.width(); ++w, ++pa, ++pb )
+                            *po++ = c_f{ static_cast<double>(*pa), static_cast<double>(*pb) };
+                    }
+                } );
+        }
+
+        /// extract the real part of complex image \a in into the
+        /// greyscale image \a out of matching depth, truncating as
+        /// required
+        void to_mono_real( const image& in, image& out ) const
+        {
+            const pixel_format_info& oinfo{ out.info() };
+            if ( oinfo.family != pixel_family::GREY )
+                core::exception_builder<std::runtime_error>()
+                    << "output must be greyscale: " << out.format();
+
+            dispatch_pixel_depth(
+                oinfo.depth,
+                [&]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    for ( uint32_t h = 0; h < in.height(); ++h )
+                    {
+                        const c_f* pi{ reinterpret_cast<const c_f*>( in.line( h ) ) };
+                        V* po{ reinterpret_cast<V*>( out.line( h ) ) };
+                        for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
+                            *po++ = static_cast<V>( pi->real );
+                    }
+                } );
         }
 
     public:
@@ -83,12 +168,11 @@ namespace openpiv::algos {
                 exception_builder<std::runtime_error>() << "dimensions must be power of 2: " << size_;
         }
 
-        /// Perform a 2-D FFT; will always produce a complex floating point image output
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        const image_c_f& transform( const ImageT<ContainedT>& input, direction d = direction::FORWARD ) const
+        /// Perform a 2-D FFT; will always produce a complex
+        /// floating point image output; note that the returned image
+        /// aliases the internal cache storage - copy (clone) or
+        /// transform the result before re-using this instance
+        const image& transform( const image& input, direction d = direction::FORWARD ) const
         {
             DECLARE_ENTRY_EXIT
             if ( input.size() != size_ )
@@ -98,19 +182,18 @@ namespace openpiv::algos {
             }
 
             // copy data, converting to complex
-            cache().output = input;
-            cache().temp.resize( input.size() );
+            to_complex( input, cache().output );
 
             // iterate over rows first
             for ( uint32_t h = 0; h < cache().output.height(); ++h )
-                fft( cache().output.line(h), cache().output.width(), d );
+                fft( reinterpret_cast<c_f*>( cache().output.line( h ) ), cache().output.width(), d );
 
             // transpose output -> temp
             transpose( cache().output, cache().temp );
 
             // now do columns
             for ( uint32_t h = 0; h < cache().temp.height(); ++h )
-                fft( cache().temp.line(h), cache().temp.width(), d );
+                fft( reinterpret_cast<c_f*>( cache().temp.line( h ) ), cache().temp.width(), d );
 
             // flip back: temp -> output
             transpose( cache().temp, cache().output );
@@ -119,17 +202,10 @@ namespace openpiv::algos {
         }
 
         /// Perform a 2-D FFT of two real images; will produce two
-        /// output images
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t<
-                       is_imagetype_v<ImageT<ContainedT>> &&
-                       is_real_mono_pixeltype_v<ContainedT>
-                       >
-                   >
-        std::tuple<image_c_f, image_c_f>
-        transform_real( const ImageT<ContainedT>& a,
-                        const ImageT<ContainedT>& b,
+        /// output (complex floating point) images
+        std::tuple<image, image>
+        transform_real( const image& a,
+                        const image& b,
                         direction d = direction::FORWARD ) const
         {
             DECLARE_ENTRY_EXIT
@@ -141,27 +217,26 @@ namespace openpiv::algos {
             }
 
             // copy data to (real, imag), converting to complex
-            cache().output = join_from_channels(a, b);
-            cache().temp.resize( cache().output.size() );
+            join_to_complex( a, b, cache().output );
 
             // iterate over rows first
             for ( uint32_t h = 0; h < cache().output.height(); ++h )
-                fft( cache().output.line(h), cache().output.width(), d );
+                fft( reinterpret_cast<c_f*>( cache().output.line( h ) ), cache().output.width(), d );
 
             // transpose output -> temp
             transpose( cache().output, cache().temp );
 
             // now do columns
             for ( uint32_t h = 0; h < cache().temp.height(); ++h )
-                fft( cache().temp.line(h), cache().temp.width(), d );
+                fft( reinterpret_cast<c_f*>( cache().temp.line( h ) ), cache().temp.width(), d );
 
             // flip back: temp -> output
             transpose( cache().temp, cache().output );
 
             // and unravel
-            const auto& transformed = cache().output;
-            auto out_a = image_c_f( transformed.size() );
-            auto out_b = image_c_f( transformed.size() );
+            const image& transformed = cache().output;
+            image out_a( transformed.size(), pixel_format::COMPLEX_F64 );
+            image out_b( transformed.size(), pixel_format::COMPLEX_F64 );
 
             const auto width = transformed.width();
             const auto height = transformed.height();
@@ -169,76 +244,115 @@ namespace openpiv::algos {
             {
                 for (uint32_t w=1; w<width; ++w)
                 {
-                    const auto t1 = transformed[ {w, h} ];
-                    const auto t2 = transformed[ {width - w, height - h} ];
-                    auto a = 0.5*(t1 + t2.conj());
-                    out_a[ {w, h} ] = a;
-                    out_a[ {width - w, height - h} ] = a.conj();
+                    const auto t1 = transformed.at<c_f>( {w, h} );
+                    const auto t2 = transformed.at<c_f>( {width - w, height - h} );
+                    auto av = 0.5*(t1 + t2.conj());
+                    out_a.at<c_f>( {w, h} ) = av;
+                    out_a.at<c_f>( {width - w, height - h} ) = av.conj();
 
-                    auto b = 0.5*(t1 - t2.conj());
-                    b = c_f(b.imag, -1.0 * b.real);
-                    out_b[ {w, h} ] = b;
-                    out_b[ {width - w, height - h} ] = b.conj();
+                    auto bv = 0.5*(t1 - t2.conj());
+                    bv = c_f(bv.imag, -1.0 * bv.real);
+                    out_b.at<c_f>( {w, h} ) = bv;
+                    out_b.at<c_f>( {width - w, height - h} ) = bv.conj();
                 }
             }
 
             return { out_a, out_b };
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename ValueT = typename ContainedT::value_t,
-                   typename OutT = image<g<ValueT>>,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        OutT
-        cross_correlate( const ImageT<ContainedT>& a,
-                         const ImageT<ContainedT>& b ) const
+        /// cross-correlate two images; requires greyscale inputs
+        /// and returns a greyscale image of the same depth
+        image
+        cross_correlate( const image& a,
+                         const image& b ) const
         {
-            image_c_f a_fft{ transform( a, direction::FORWARD ) };
-            const image_c_f& b_fft = transform( b, direction::FORWARD );
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "cross_correlate requires greyscale images: " << a.format();
 
-            a_fft = b_fft * conj( a_fft );
-            OutT output{ real( transform( a_fft, direction::REVERSE ) ) };
+            const image& fa = transform( a, direction::FORWARD );
+            image a_fft{ fa.clone() };
+            const image& fb = transform( b, direction::FORWARD );
+
+            // a_fft = fb * conj(a_fft)
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
+            {
+                const c_f* pb{ reinterpret_cast<const c_f*>( fb.line( h ) ) };
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = *pb++ * pa->conj();
+            }
+
+            image output( size_, a.format() );
+            to_mono_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename ValueT = typename ContainedT::value_t,
-                   typename OutT = image<g<ValueT>>,
-                   typename = typename std::enable_if_t<
-                       is_imagetype_v<ImageT<ContainedT>> &&
-                       is_real_mono_pixeltype_v<ContainedT>
-                       >
-                   >
-        OutT
-        cross_correlate_real( const ImageT<ContainedT>& a,
-                              const ImageT<ContainedT>& b ) const
+        /// cross-correlate two greyscale images using the real
+        /// transform trick
+        image
+        cross_correlate_real( const image& a,
+                              const image& b ) const
         {
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "cross_correlate_real requires greyscale images: " << a.format();
+
             auto [a_fft, b_fft] = transform_real( a, b, direction::FORWARD );
-            a_fft = b_fft * conj( a_fft );
-            OutT output{ real( transform( a_fft, direction::REVERSE ) ) };
+
+            // a_fft = b_fft * conj(a_fft)
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
+            {
+                const c_f* pb{ reinterpret_cast<const c_f*>( b_fft.line( h ) ) };
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = *pb++ * pa->conj();
+            }
+
+            image output( size_, a.format() );
+            to_mono_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        const image_c_f& auto_correlate( const ImageT<ContainedT>& a ) const
+        /// auto-correlate an image; the output is a complex image
+        /// with zero imaginary part (matching the legacy behaviour)
+        image
+        auto_correlate( const image& a ) const
         {
-            image_c_f a_fft{ transform( a, direction::FORWARD ) };
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono && ainfo.family != pixel_family::COMPLEX )
+                core::exception_builder<std::runtime_error>()
+                    << "auto_correlate requires a mono (greyscale or complex) image: " << a.format();
 
-            a_fft = abs_sqr( a_fft );
-            cache().output = real( transform( a_fft, direction::REVERSE ) );
-            swap_quadrants( cache().output );
+            image a_fft{ transform( a, direction::FORWARD ).clone() };
 
-            return cache().output;
+            // a_fft = abs_sqr( a_fft )
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
+            {
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = c_f( pa->abs_sqr() );
+            }
+
+            const image& fr = transform( a_fft, direction::REVERSE );
+
+            image output( size_, pixel_format::COMPLEX_F64 );
+            for ( uint32_t h = 0; h < output.height(); ++h )
+            {
+                const c_f* pi{ reinterpret_cast<const c_f*>( fr.line( h ) ) };
+                c_f* po{ reinterpret_cast<c_f*>( output.line( h ) ) };
+                for ( uint32_t w = 0; w < output.width(); ++w, ++pi )
+                    *po++ = c_f( pi->real );
+            }
+            swap_quadrants( output );
+
+            return output;
         }
 
     private:
@@ -279,8 +393,7 @@ namespace openpiv::algos {
                 const double scaling{ d == direction::FORWARD ? -1.0 : 1.0 };
                 std::vector<c_f> twiddle(n);
                 std::generate(
-                    std::begin(twiddle),
-                    std::end(twiddle),
+                    std::begin(twiddle), std::end(twiddle),
                     [i=0, n, scaling]() mutable {
                         const double theta = (scaling * M_PI * i++)/n;
                         return c_f{ std::cos( theta ), std::sin( theta ) };

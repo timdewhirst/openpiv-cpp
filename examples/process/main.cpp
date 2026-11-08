@@ -23,8 +23,7 @@
 #include "loaders/image_loader.h"
 #include "core/enumerate.h"
 #include "core/grid.h"
-#include "core/image.h"
-#include "core/image_utils.h"
+#include "core/image_utils2.h"
 #include "core/log.h"
 #include "core/stream_utils.h"
 #include "core/vector.h"
@@ -103,7 +102,7 @@ int main( int argc, char* argv[] )
     logger::info("thread count: {}", thread_count);
 
     // get images
-    std::vector<core::image_g_f> images;
+    std::vector<core::image> images;
     try {
         for ( const auto& input_file : input_files )
         {
@@ -115,9 +114,10 @@ int main( int argc, char* argv[] )
             if ( !loader )
                 core::exception_builder<std::runtime_error>() << "failed to find loader for " << input_file;
 
-            core::image_g_f image;
+            core::image image;
             loader->load( is, image );
-            images.emplace_back(std::move(image));
+            // process in double precision
+            images.emplace_back( core::convert( image, core::pixel_format::GREY_F64 ) );
         }
     }
     catch ( std::exception& e )
@@ -165,28 +165,28 @@ int main( int argc, char* argv[] )
     std::vector<point_vector> found_peaks( grid.size() );
 
     // wrap correlators
-    using correlator_t = std::function<core::image_g_f(const core::image_g_f&, const core::image_g_f&)>;
+    using correlator_t = std::function<core::image(const core::image&, const core::image&)>;
     std::unordered_map<std::string, correlator_t> correlators = {
         {"complex",
-         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
+         [ia](const core::image& im_a, const core::image& im_b) -> core::image
              {
                  static algos::FFT fft{ ia };
                  return fft.cross_correlate(im_a, im_b);
              } },
         {"real",
-         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
+         [ia](const core::image& im_a, const core::image& im_b) -> core::image
              {
                  static algos::FFT fft{ ia };
                  return fft.cross_correlate_real(im_a, im_b);
              } },
         {"pocket",
-         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
+         [ia](const core::image& im_a, const core::image& im_b) -> core::image
              {
                  static algos::PocketFFT fft{ ia };
                  return fft.cross_correlate(im_a, im_b);
              } },
         {"pocket_real",
-         [ia](const core::image_g_f& im_a, const core::image_g_f& im_b) -> core::image_g_f
+         [ia](const core::image& im_a, const core::image& im_b) -> core::image
              {
                  static algos::PocketFFT fft{ ia };
                  return fft.cross_correlate_real(im_a, im_b);
@@ -207,14 +207,14 @@ int main( int argc, char* argv[] )
 
                          const auto t0 = std::chrono::high_resolution_clock::now();
 
-                         const auto view_a{ core::extract( images[0], ia ) };
-                         const auto view_b{ core::extract( images[1], ia ) };
+                         const auto view_a{ images[0].extract( ia ) };
+                         const auto view_b{ images[1].extract( ia ) };
                          const auto t1 = std::chrono::high_resolution_clock::now();
                          result.extract_dt = t1 - t0;
 
                          // prepare & correlate
                          // output of correlation has lost positional information
-                         const core::image_g_f output{ correlator( view_a, view_b ) };
+                         const core::image output{ correlator( view_a, view_b ) };
                          const auto t2 = std::chrono::high_resolution_clock::now();
                          result.correlate_dt = t2 - t1;
 
@@ -222,12 +222,12 @@ int main( int argc, char* argv[] )
                          constexpr uint16_t num_peaks = 2;
                          constexpr uint16_t radius = 1;
 
-                         core::peaks_t<core::g_f> peaks;
+                         std::vector<core::image> peaks;
 
                          if (limit_search)
                          {
                              // reduce search radius
-                             auto centre = core::create_image_view( output, output.rect().dilate(0.5) );
+                             auto centre = output.sub_image( output.rect().dilate(0.5) );
                              peaks = core::find_peaks( centre, num_peaks, radius );
                          } else {
                              peaks = core::find_peaks( output, num_peaks, radius );
@@ -254,8 +254,8 @@ int main( int argc, char* argv[] )
                          result.xy[1] = images[0].height() - result.xy[1];
 
                          // find s/n (or rather, highest to next highest peak)
-                         if ( peaks[1][ {1, 1} ] > 0 )
-                             result.sn = peaks[0][ {1, 1} ]/peaks[1][ {1, 1} ];
+                         if ( peaks[1].at<core::g_f>( core::point2<uint32_t>( 1, 1 ) ) > 0.0 )
+                             result.sn = peaks[0].at<core::g_f>( core::point2<uint32_t>( 1, 1 ) ) / peaks[1].at<core::g_f>( core::point2<uint32_t>( 1, 1 ) );
 
                          const auto t4 = std::chrono::high_resolution_clock::now();
                          result.total_dt = t4 - t0;

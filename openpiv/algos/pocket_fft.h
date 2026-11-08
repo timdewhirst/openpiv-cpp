@@ -18,9 +18,9 @@
 #include "algos/fft_common.h"
 #include "core/enum_helper.h"
 #include "core/exception_builder.h"
-#include "core/image.h"
-#include "core/image_utils.h"
-#include "core/pixel_types.h"
+#include "core/image2.h"
+#include "core/image_utils2.h"
+#include "core/pixel_format.h"
 #include "core/util.h"
 
 namespace openpiv::algos {
@@ -38,9 +38,9 @@ namespace openpiv::algos {
         /// storage for intermediate data
         struct data_t
         {
-            image_c_f output;
-            std::vector< c_f > fft_buffer;
-            image_c_f temp;
+            image output;
+            image temp;
+            std::vector< std::complex<double> > buffer;
         };
 
         /// helpers to allow TLS for intermediate storage
@@ -51,7 +51,7 @@ namespace openpiv::algos {
             return static_data;
         }
 
-        /// \fn cache contains a per-thread, per-instance copy of data
+        /// cache contains a per-thread, per-instance copy of data
         /// that is lazily initialized; this allows a single instance
         /// of FFT to be called from multiple threads without locking
         data_t& cache() const
@@ -64,13 +64,81 @@ namespace openpiv::algos {
             }
 
             data_t data;
-            size_t N{ maximal_size( size_ ).width() };
-            data.output.resize( size_ );
-            data.temp.resize( transpose(size_) );
-            data.fft_buffer.resize( N );
+            data.output = image( size_, pixel_format::COMPLEX_F64 );
+            data.temp = image( size_, pixel_format::COMPLEX_F64 );
             auto& [fft, result] = storage().emplace_back(self, std::move(data));
 
             return result;
+        }
+
+        const pfft::shape_t shape() const
+        {
+            /// note: pocketfft shape is (x, y)
+            return { size_.width(), size_.height() };
+        }
+
+        static pfft::stride_t strides( const image& im )
+        {
+            const auto [x, y] = im.stride();
+            // pocketfft strides are (x, y) i.e. by dimension
+            return { static_cast<long>( x ), static_cast<long>( y ) };
+        }
+
+        /// fill \a out (complex floating point) from \a in; \a in
+        /// may be any greyscale or complex image
+        void to_complex( const image& in, image& out ) const
+        {
+            if ( !in.info().is_mono && in.info().family != pixel_family::COMPLEX )
+                core::exception_builder<std::runtime_error>()
+                    << "transform requires a mono (greyscale or complex) image: " << in.format();
+
+            dispatch_pixel_type(
+                in.format(),
+                [&in, &out]( auto tag )
+                {
+                    using FromT = typename decltype( tag )::type;
+                    using ToT = c_f;
+                    if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
+                    {
+                        for ( uint32_t h = 0; h < in.height(); ++h )
+                        {
+                            const FromT* s{ reinterpret_cast<const FromT*>( in.line( h ) ) };
+                            ToT* d{ reinterpret_cast<ToT*>( out.line( h ) ) };
+                            for ( uint32_t w = 0; w < in.width(); ++w )
+                                convert( *s++, *d++ );
+                        }
+                    }
+                    else
+                    {
+                        core::exception_builder<std::runtime_error>()
+                            << "no conversion to complex for format: " << in.format();
+                    }
+                } );
+        }
+
+        /// extract the real part of complex image \a in into the
+        /// greyscale image \a out of matching depth, truncating as
+        /// required
+        void to_mono_real( const image& in, image& out ) const
+        {
+            const pixel_format_info& oinfo{ out.info() };
+            if ( oinfo.family != pixel_family::GREY )
+                core::exception_builder<std::runtime_error>()
+                    << "output must be greyscale: " << out.format();
+
+            dispatch_pixel_depth(
+                oinfo.depth,
+                [&]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    for ( uint32_t h = 0; h < in.height(); ++h )
+                    {
+                        const c_f* pi{ reinterpret_cast<const c_f*>( in.line( h ) ) };
+                        V* po{ reinterpret_cast<V*>( out.line( h ) ) };
+                        for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
+                            *po++ = static_cast<V>( pi->real );
+                    }
+                } );
         }
 
     public:
@@ -82,12 +150,11 @@ namespace openpiv::algos {
                 exception_builder<std::runtime_error>() << "dimensions must be power of 2: " << size_;
         }
 
-        /// Perform a 2-D FFT; will always produce a complex floating point image output
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        const image_c_f& transform( const ImageT<ContainedT>& input, direction d = direction::FORWARD ) const
+        /// Perform a 2-D FFT; will always produce a complex
+        /// floating point image output; note that the returned image
+        /// aliases the internal cache storage - copy (clone) or
+        /// transform the result before re-using this instance
+        const image& transform( const image& input, direction d = direction::FORWARD ) const
         {
             DECLARE_ENTRY_EXIT
             if ( input.size() != size_ )
@@ -96,44 +163,30 @@ namespace openpiv::algos {
                     << "image size is different from expected: " << input.size() << ", " << size_;
             }
 
-            using value_t = typename ContainedT::value_t;
-
             // copy data, converting to complex
-            cache().temp = input;
-            cache().output.resize( input.size() );
+            to_complex( input, cache().temp );
 
-            const pfft::shape_t shape = {size_.width(), size_.height()};
-            const auto [stride_x, stride_y] = cache().temp.stride();
-            const pfft::stride_t stride = {static_cast<long>(stride_x), static_cast<long>(stride_y)};
-
-            // can reinterpret core::complex to std::complex because core::complex is packed and
-            // std::complex is also packed and makes guarantees about accessibility through array
-            // access
-            pfft::c2c<value_t>(
-                shape,
-                stride,
-                stride,                  // input and output strides should be the same
-                { 0, 1 },                // axes
-                d == direction::FORWARD, // forward
-                reinterpret_cast<const std::complex<value_t>*>(cache().temp.data()),
-                reinterpret_cast<std::complex<value_t>*>(cache().output.data()),
+            // can reinterpret core::complex to std::complex because core::complex
+            // is packed and std::complex is also packed and makes guarantees about
+            // accessibility through array access
+            pfft::c2c<double>(
+                shape(),
+                strides( cache().temp ),
+                strides( cache().output ),    // input and output strides should be the same
+                { 0, 1 },                      // axes
+                d == direction::FORWARD,       // forward
+                reinterpret_cast<const std::complex<double>*>( cache().temp.data() ),
+                reinterpret_cast<std::complex<double>*>( cache().output.data() ),
                 1.0 );
 
             return cache().output;
         }
 
-        /// Perform a 2-D FFT of two real images; will produce two
-        /// output images
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t<
-                       is_imagetype_v<ImageT<ContainedT>> &&
-                       is_real_mono_pixeltype_v<ContainedT>
-                       >
-                   >
-        std::tuple<image_c_f&, image_c_f&>
-        transform_real( const ImageT<ContainedT>& a,
-                        const ImageT<ContainedT>& b,
+        /// Perform a 2-D FFT of two greyscale images; will produce
+        /// two output (complex floating point) images
+        std::tuple<image, image>
+        transform_real( const image& a,
+                        const image& b,
                         direction d = direction::FORWARD ) const
         {
             DECLARE_ENTRY_EXIT
@@ -144,149 +197,138 @@ namespace openpiv::algos {
                     << ", " << size_;
             }
 
-            using value_t = typename ContainedT::value_t;
+            const pixel_format_info& ainfo{ a.info() };
+            const pixel_format_info& binfo{ b.info() };
+            if ( !ainfo.is_mono || !binfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "transform_real requires greyscale images: " << a.format() << ", " << b.format();
 
-            cache().output.resize( a.size() );
-            cache().temp.resize( b.size() );
+            // non-double inputs are converted for the real transform;
+            // note that input strides may arise from sub-images
+            const image& in_a = a.info().depth == pixel_depth::F64 ? a : convert( a, pixel_format::GREY_F64 );
+            const image& in_b = b.info().depth == pixel_depth::F64 ? b : convert( b, pixel_format::GREY_F64 );
 
-            auto& out_a = cache().output;
-            auto& out_b = cache().temp;
-
-            constexpr auto stride_lambda = [](auto& im) -> pfft::stride_t
-                {
-                    const auto [stride_x, stride_y] = im.stride();
-                    return {static_cast<long>(stride_x), static_cast<long>(stride_y)};
-                };
-
-            const pfft::shape_t shape = {size_.width(), size_.height()};
-            const pfft::stride_t in_a_stride = stride_lambda(a);
-            const pfft::stride_t in_b_stride = stride_lambda(b);
-            const pfft::stride_t out_a_stride = stride_lambda(out_a);
-            const pfft::stride_t out_b_stride = stride_lambda(out_b);
-
-            pfft::r2c<value_t>(
-                shape,
-                in_a_stride,
-                out_a_stride,
-                { 0, 1 },                // axes
-                d == direction::FORWARD, // forward
-                reinterpret_cast<const value_t*>(a.data()),
-                reinterpret_cast<std::complex<value_t>*>(out_a.data()),
+            pfft::r2c<double>(
+                shape(),
+                strides( in_a ),
+                strides( cache().output ),
+                { 0, 1 },                      // axes
+                d == direction::FORWARD,        // forward
+                reinterpret_cast<const double*>( in_a.data() ),
+                reinterpret_cast<std::complex<double>*>( cache().output.data() ),
                 1.0 );
 
-            pfft::r2c<value_t>(
-                shape,
-                in_b_stride,
-                out_b_stride,
-                { 0, 1 },                // axes
-                d == direction::FORWARD, // forward
-                reinterpret_cast<const value_t*>(b.data()),
-                reinterpret_cast<std::complex<value_t>*>(out_b.data()),
+            image out_a{ cache().output.clone() };
+
+            pfft::r2c<double>(
+                shape(),
+                strides( in_b ),
+                strides( cache().temp ),
+                { 0, 1 },                      // axes
+                d == direction::FORWARD,        // forward
+                reinterpret_cast<const double*>( in_b.data() ),
+                reinterpret_cast<std::complex<double>*>( cache().temp.data() ),
                 1.0 );
 
-            return { out_a, out_b };
+            image out_b{ cache().temp.clone() };
+
+            return { std::move( out_a ), std::move( out_b ) };
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename ValueT = typename ContainedT::value_t,
-                   typename OutT = image<g<ValueT>>,
-                   typename = typename std::enable_if_t<
-                       is_imagetype_v<ImageT<ContainedT>> &&
-                       is_complex_mono_pixeltype_v<ContainedT>
-                       >
-                   >
-        OutT
-        transform_real( const ImageT<ContainedT>& in,
-                        direction d = direction::FORWARD ) const
+        /// cross-correlate two images; requires greyscale inputs
+        /// and returns a greyscale image of the same depth
+        image
+        cross_correlate( const image& a,
+                         const image& b ) const
         {
-            DECLARE_ENTRY_EXIT
-            if ( in.size() != size_ )
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "cross_correlate requires greyscale images: " << a.format();
+
+            const image& fa = transform( a, direction::FORWARD );
+            image a_fft{ fa.clone() };
+            const image& fb = transform( b, direction::FORWARD );
+
+            // a_fft = fb * conj(a_fft)
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
             {
-                exception_builder< std::runtime_error >()
-                    << "image size is different from expected: " << in.size()
-                    << ", " << size_;
+                const c_f* pb{ reinterpret_cast<const c_f*>( fb.line( h ) ) };
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = *pb++ * pa->conj();
             }
 
-            OutT out{ in.size() };
-
-            constexpr auto stride_lambda = [](auto& im) -> pfft::stride_t
-                {
-                    const auto [stride_x, stride_y] = im.stride();
-                    return {static_cast<long>(stride_x), static_cast<long>(stride_y)};
-                };
-
-            const pfft::shape_t shape = {size_.width(), size_.height()};
-            const pfft::stride_t in_stride = stride_lambda(in);
-            const pfft::stride_t out_stride = stride_lambda(out);
-
-            pfft::c2r<ValueT>(
-                shape,
-                in_stride,
-                out_stride,
-                { 0, 1 },                // axes
-                d == direction::FORWARD, // forward
-                reinterpret_cast<const std::complex<ValueT>*>(in.data()),
-                reinterpret_cast<ValueT*>(out.data()),
-                1.0 );
-
-            return out;
-        }
-
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename ValueT = typename ContainedT::value_t,
-                   typename OutT = image<g<ValueT>>,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        OutT
-        cross_correlate( const ImageT<ContainedT>& a,
-                         const ImageT<ContainedT>& b ) const
-        {
-            image_c_f a_fft{ transform( a, direction::FORWARD ) };
-            image_c_f b_fft{ transform( b, direction::FORWARD ) };
-
-            a_fft = b_fft * conj( a_fft );
-            OutT output{ real( transform( a_fft, direction::REVERSE ) ) };
+            image output( size_, a.format() );
+            to_mono_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename ValueT = typename ContainedT::value_t,
-                   typename OutT = image<g<ValueT>>,
-                   typename = typename std::enable_if_t<
-                       is_imagetype_v<ImageT<ContainedT>> &&
-                       is_real_mono_pixeltype_v<ContainedT>
-                       >
-                   >
-        OutT
-        cross_correlate_real( const ImageT<ContainedT>& a,
-                              const ImageT<ContainedT>& b ) const
+        /// cross-correlate two greyscale images using the real
+        /// transform trick; the output is a greyscale floating
+        /// point image
+        image
+        cross_correlate_real( const image& a,
+                              const image& b ) const
         {
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono )
+                core::exception_builder<std::runtime_error>()
+                    << "cross_correlate_real requires greyscale images: " << a.format();
+
             auto [a_fft, b_fft] = transform_real( a, b, direction::FORWARD );
-            a_fft = b_fft * conj( a_fft );
-            OutT output = transform_real( a_fft, direction::REVERSE );
+
+            // a_fft = b_fft * conj(a_fft)
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
+            {
+                const c_f* pb{ reinterpret_cast<const c_f*>( b_fft.line( h ) ) };
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = *pb++ * pa->conj();
+            }
+
+            image output( size_, pixel_format::GREY_F64 );
+            to_mono_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
         }
 
-        template < template <typename> class ImageT,
-                   typename ContainedT,
-                   typename = typename std::enable_if_t< is_imagetype_v<ImageT<ContainedT>> >
-                   >
-        const image_c_f& auto_correlate( const ImageT<ContainedT>& a ) const
+        /// auto-correlate an image; the output is a complex image
+        /// with zero imaginary part
+        image
+        auto_correlate( const image& a ) const
         {
-            image_c_f a_fft{ transform( a, direction::FORWARD ) };
+            const pixel_format_info& ainfo{ a.info() };
+            if ( !ainfo.is_mono && ainfo.family != pixel_family::COMPLEX )
+                core::exception_builder<std::runtime_error>()
+                    << "auto_correlate requires a mono (greyscale or complex) image: " << a.format();
 
-            a_fft = abs_sqr( a_fft );
-            cache().output = real( transform( a_fft, direction::REVERSE ) );
-            swap_quadrants( cache().output );
+            image a_fft{ transform( a, direction::FORWARD ).clone() };
 
-            return cache().output;
+            // a_fft = abs_sqr( a_fft )
+            for ( uint32_t h = 0; h < a_fft.height(); ++h )
+            {
+                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
+                    *pa = c_f( pa->abs_sqr() );
+            }
+
+            const image& fr = transform( a_fft, direction::REVERSE );
+
+            image output( size_, pixel_format::COMPLEX_F64 );
+            for ( uint32_t h = 0; h < output.height(); ++h )
+            {
+                const c_f* pi{ reinterpret_cast<const c_f*>( fr.line( h ) ) };
+                c_f* po{ reinterpret_cast<c_f*>( output.line( h ) ) };
+                for ( uint32_t w = 0; w < output.width(); ++w, ++pi )
+                    *po++ = c_f( pi->real );
+            }
+            swap_quadrants( output );
+
+            return output;
         }
     };
 

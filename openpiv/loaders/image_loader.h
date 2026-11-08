@@ -1,7 +1,7 @@
-
 #pragma once
 
 // std
+#include <cstddef>
 #include <functional>
 #include <iosfwd>
 #include <memory>
@@ -10,8 +10,7 @@
 #include <type_traits>
 
 // local
-#include "core/image.h"
-#include "core/image_view.h"
+#include "core/image2.h"
 
 namespace openpiv::core {
 
@@ -64,7 +63,13 @@ namespace openpiv::core {
     /// information along with offsets to the contained images.
     ///
     /// A call to load() or open() must reset the state held within
-    /// a loader, and
+    /// a loader.
+    ///
+    /// The format of an extracted image is determined by the
+    /// contents of the file; use image utilities to convert to a
+    /// required format. Similarly, saving accepts any image, with
+    /// the supported formats determined by the file format - an
+    /// unsupported image format is a runtime error.
     class image_loader
     {
     public:
@@ -81,7 +86,7 @@ namespace openpiv::core {
         /// polymorphic clone
         virtual image_loader_ptr_t clone() const = 0;
 
-        /// \return true if this loader can load the data fuond in \a stream
+        /// \return true if this loader can load the data found in \a stream
         virtual bool can_load( std::istream& ) const = 0;
 
         /// \return true if this loader can save data
@@ -97,25 +102,19 @@ namespace openpiv::core {
 
         /// Extract an image from an opened stream;
         /// may throw ImageLoaderException if there is an issue
-        virtual bool extract( size_t index, image_g_16& ) = 0;
-        virtual bool extract( size_t index, image_g_f& ) = 0;
-        virtual bool extract( size_t index, image_rgba_16& ) = 0;
+        virtual bool extract( size_t index, image& im ) = 0;
 
         /// Load the image from \a stream; this is a convenience method
         /// that combines open/extract for the first image found
         /// may throw ImageLoaderException if there is an issue
-        virtual bool load( std::istream& is, image_g_16& im ) { return open(is) && extract(0, im); }
-        virtual bool load( std::istream& is, image_g_f& im ) { return open(is) && extract(0, im); }
-        virtual bool load( std::istream& is, image_rgba_16& im ) { return open(is) && extract(0, im); }
+        virtual bool load( std::istream& is, image& im )
+        {
+            return open(is) && extract(0, im);
+        }
 
         /// Save the image to \a stream
         /// may throw ImageLoaderException if there is an issue
-        virtual void save( std::ostream&, const image_g_16& ) const = 0;
-        virtual void save( std::ostream&, const image_g_f& ) const = 0;
-        virtual void save( std::ostream&, const image_rgba_16& ) const = 0;
-        virtual void save( std::ostream&, const image_g_16_view& ) const = 0;
-        virtual void save( std::ostream&, const image_g_f_view& ) const = 0;
-        virtual void save( std::ostream&, const image_rgba_16_view& ) const = 0;
+        virtual void save( std::ostream&, const image& im ) const = 0;
     };
 
 }

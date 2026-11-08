@@ -1,10 +1,10 @@
-
 #include "loaders/tiff_image_loader.h"
 
 // std
 #include <array>
 #include <istream>
 #include <memory>
+#include <vector>
 
 // libtiff
 #include <tiffio.h>
@@ -12,13 +12,14 @@
 
 // local
 #include "core/util.h"
-#include "core/image.h"
+#include "core/image2.h"
 #include "core/log.h"
 #include "core/enum_helper.h"
 
 
 namespace {
 
+    using namespace openpiv;
     using namespace openpiv::core;
     namespace logger = openpiv::core::logger;
 
@@ -51,105 +52,6 @@ namespace {
             { sample_format::COMPLEXINT,    "complex int" },
             { sample_format::COMPLEXIEEEFP, "complex floating point" }
         } )
-
-    template < typename PixelT, planar_config, sample_format, uint16_t SampleN, uint16_t BitsPerSample >
-    image<PixelT> copy(TIFF* tiff, uint32_t width, uint32_t height);
-
-    // 8-bit greyscale to 16-bit greyscale
-    template <>
-    image_g_16 copy<g_16, planar_config::CONTIG, sample_format::UINT, 1, 8>(TIFF* tiff, uint32_t width, uint32_t height)
-    {
-        image_g_16 im(width, height, 0);
-
-        // allocate line buffer
-        size_t bytesPerLine = TIFFScanlineSize( tiff );
-        std::vector<g_8> buf(bytesPerLine);
-
-        // copy the data
-        for (uint32_t h=0; h<height; ++h)
-        {
-            // Reading the data line by line; source and destination match so just memcpy
-            TIFFReadScanline(tiff, &buf[0], h, 0);
-            g_16* destp = im.line(h);
-            g_8* srcp = &buf[0];
-            for ( size_t w=0; w<width; ++w )
-                *destp++ = *srcp++;
-        }
-
-        return im;
-    }
-
-    // 16-bit greyscale to 16-bit greyscale
-    template <>
-    image_g_16 copy<g_16, planar_config::CONTIG, sample_format::UINT, 1, 16>(TIFF* tiff, uint32_t width, uint32_t height)
-    {
-        image_g_16 im(width, height, 0);
-
-        // copy the data
-        for (uint32_t h=0; h<height; ++h)
-        {
-            // Reading the data line by line; source and destination match so just memcpy
-            TIFFReadScanline(tiff, im.line(h), h, 0);
-        }
-
-        return im;
-    }
-
-    // 16-bit RGB to 16-bit RGBA
-    template <>
-    image_rgba_16 copy<rgba_16, planar_config::CONTIG, sample_format::UINT, 3, 16>(TIFF* tiff, uint32_t width, uint32_t height)
-    {
-        image_rgba_16 im(width, height, 0);
-
-        // allocate line buffer
-        size_t bytesPerLine = TIFFScanlineSize( tiff );
-        std::vector<g_16> buf(bytesPerLine >> 1);
-
-        // copy the data
-        for (uint32_t h=0; h<height; ++h)
-        {
-            TIFFReadScanline(tiff, &buf[0], h, 0);
-            rgba_16* destp = im.line(h);
-            g_16* srcp = &buf[0];
-            for ( size_t w=0; w<width; ++w )
-            {
-                destp->r = *srcp++;
-                destp->g = *srcp++;
-                destp->b = *srcp++;
-                ++destp;
-            }
-        }
-
-        return im;
-    }
-
-    // 8-bit RGB to 16-bit RGBA
-    template <>
-    image_rgba_16 copy<rgba_16, planar_config::CONTIG, sample_format::UINT, 3, 8>(TIFF* tiff, uint32_t width, uint32_t height)
-    {
-        image_rgba_16 im(width, height, 0);
-
-        // allocate line buffer
-        size_t bytesPerLine = TIFFScanlineSize( tiff );
-        std::vector<g_8> buf(bytesPerLine);
-
-        // copy the data
-        for (uint32_t h=0; h<height; ++h)
-        {
-            TIFFReadScanline(tiff, &buf[0], h, 0);
-            rgba_16* destp = im.line(h);
-            g_8* srcp = &buf[0];
-            for ( size_t w=0; w<width; ++w )
-            {
-                destp->r = *srcp++;
-                destp->g = *srcp++;
-                destp->b = *srcp++;
-                ++destp;
-            }
-        }
-
-        return im;
-    }
 }
 
 
@@ -213,13 +115,17 @@ namespace openpiv::core {
             return true;
         }
 
-        template <typename PixelT>
-        bool extract( size_t index, image<PixelT>& im ) const
+        /// extract image #index; the format of the resulting image
+        /// is determined by the file contents: 8 or 16 bit unsigned
+        /// samples; 1 sample per pixel (grey) or 3 contiguous
+        /// samples per pixel (RGB); libtiff renders sample data in
+        /// machine byte order
+        bool extract( size_t index, image& im ) const
         {
             if ( !tiff )
                 return false;
 
-            if ( !(spp == 0 || spp == 1 || spp == 3) )
+            if ( !(spp == 1 || spp == 3) )
             {
                 logger::error("images with spp != 1 or 3 not yet supported: ({})", spp);
                 return false;
@@ -231,26 +137,35 @@ namespace openpiv::core {
                 return false;
             }
 
+            if ( !(bps == 8 || bps == 16) ||
+                 format == sample_format::IEEEFP ||
+                 format == sample_format::COMPLEXIEEEFP ||
+                 planar == planar_config::SEPARATE )
+            {
+                logger::error("unsupported tiff: bps: {}, format: {}, planar: {}",
+                              bps, to_string(format), to_string(planar));
+                return false;
+            }
+
             // get correct image
-            if ( TIFFSetDirectory( tiff.get(), (uint16_t)index ) == 0 )
+            if ( TIFFSetDirectory( tiff.get(), static_cast<uint16_t>( index ) ) == 0 )
             {
                 logger::error("failed to set directory to: {}", index);
                 return false;
             }
 
-            if ( spp == 1 )
+            const pixel_format im_format{
+                spp == 1
+                    ? (bps == 8 ? pixel_format::GREY_U8 : pixel_format::GREY_U16)
+                    : (bps == 8 ? pixel_format::RGB_U8 : pixel_format::RGB_U16) };
+            im = image( width, height, im_format );
+
+            // per-line reads; scanline size matches image pitch
+            std::vector<uint8_t> buffer( TIFFScanlineSize( tiff.get() ) );
+            for ( uint32_t h = 0; h < height; ++h )
             {
-                if ( bps == 8 )
-                    im = copy<g_16, planar_config::CONTIG, sample_format::UINT, 1, 8>(tiff.get(), width, height);
-                else
-                    im = copy<g_16, planar_config::CONTIG, sample_format::UINT, 1, 16>(tiff.get(), width, height);
-            }
-            else
-            {
-                if ( bps == 8 )
-                    im = copy<rgba_16, planar_config::CONTIG, sample_format::UINT, 3, 8>(tiff.get(), width, height);
-                else
-                    im = copy<rgba_16, planar_config::CONTIG, sample_format::UINT, 3, 16>(tiff.get(), width, height);
+                TIFFReadScanline( tiff.get(), buffer.data(), h, 0 );
+                std::memcpy( im.line( h ), buffer.data(), im.pitch() );
             }
 
             return true;
@@ -323,47 +238,15 @@ namespace openpiv::core {
         return impl_->open();
     }
 
-    bool tiff_image_loader::extract( size_t index, image_g_16& im )
+    bool tiff_image_loader::extract( size_t index, image& im )
     {
+        if ( !impl_ )
+            return false;
+
         return impl_->extract( index, im );
     }
 
-    bool tiff_image_loader::extract( size_t index, image_g_f& im )
-    {
-        return impl_->extract( index, im );
-    }
-
-    bool tiff_image_loader::extract( size_t index, image_rgba_16& im )
-    {
-        return impl_->extract( index, im );
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_g_16& ) const
-    {
-        exception_builder<image_loader_exception>() << name() << ": cannot save data";
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_g_16_view& ) const
-    {
-        exception_builder<image_loader_exception>() << name() << ": cannot save data";
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_g_f& ) const
-    {
-        exception_builder<image_loader_exception>() << name() << ": cannot save data";
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_g_f_view& ) const
-    {
-        exception_builder<image_loader_exception>() << name() << ": cannot save data";
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_rgba_16& ) const
-    {
-        exception_builder<image_loader_exception>() << name() << ": cannot save data";
-    }
-
-    void tiff_image_loader::save( std::ostream&, const image_rgba_16_view& ) const
+    void tiff_image_loader::save( std::ostream&, const image& ) const
     {
         exception_builder<image_loader_exception>() << name() << ": cannot save data";
     }

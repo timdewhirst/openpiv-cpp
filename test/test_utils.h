@@ -1,21 +1,20 @@
-
 #pragma once
 
 // std
-#include <cinttypes>
 #include <fstream>
+#include <memory>
 #include <string>
-#include <tuple>
 
 // to be tested
-#include "core/image.h"
-#include "core/image_utils.h"
+#include "core/image2.h"
 #include "loaders/image_loader.h"
 
+using namespace openpiv;
 using namespace openpiv::core;
 
-template < typename ContainedT >
-image< ContainedT > load_from_file( const std::string& filename )
+/// load the first image from a file; the format of the returned
+/// image is determined by the file
+inline image load_from_file( const std::string& filename )
 {
     std::ifstream is(filename, std::ios::binary);
     if ( !is.is_open() )
@@ -25,37 +24,24 @@ image< ContainedT > load_from_file( const std::string& filename )
     if ( !loader )
         exception_builder<std::runtime_error>() << "failed to find loader for " << filename;
 
-    image< ContainedT > result;
+    image result;
     loader->load( is, result );
     is.close();
 
     return result;
 }
 
-template < template<typename> class ImageT,
-           typename ContainedT,
-           typename E = typename std::enable_if_t<
-               std::is_same_v< ImageT<ContainedT>, image<ContainedT> > ||
-               std::is_same_v< ImageT<ContainedT>, image_view<ContainedT> > > >
-bool save_to_file( const std::string& filename, const ImageT< ContainedT >& im )
+/// save an image as PNM; note that PNM is 16-bit so pixel data may
+/// be converted
+inline bool save_to_file( const std::string& filename, const image& im )
 {
     std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
     if ( !writer )
         exception_builder<std::runtime_error>() << "failed to find image writer";
 
-    std::fstream os( filename, std::ios_base::trunc | std::ios_base::out );
+    std::fstream os( filename, std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
     writer->save( os, im );
     os.close();
 
     return true;
-}
-
-template < typename T >
-typename std::enable_if_t< is_pixeltype_v<T>, std::tuple< image<T>, T > >
-create_and_fill( const size& s, T v )
-{
-    image<T> result( s );
-    fill( result, v );
-
-    return std::make_tuple( result, v );
 }
