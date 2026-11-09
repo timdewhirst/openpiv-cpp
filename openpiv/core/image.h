@@ -150,10 +150,10 @@ public:
     template <typename PixelT>
     PixelT& at( index_t i )
     {
-        check_pixel_type<PixelT>();
+        if ( format_for_v<PixelT> != fmt_ )
+            throw_pixel_type_mismatch<PixelT>();
         if ( i >= pixel_count() )
-            core::exception_builder<std::out_of_range>()
-                << "pixel index out of range: " << i << ", max is: " << pixel_count();
+            throw_pixel_index_out_of_range( i );
 
         const pixel_format_info& fi{ info() };
         const size_t x{ i % width() };
@@ -168,11 +168,10 @@ public:
     template <typename PixelT>
     PixelT& at( const point2<uint32_t>& xy )
     {
-        check_pixel_type<PixelT>();
+        if ( format_for_v<PixelT> != fmt_ )
+            throw_pixel_type_mismatch<PixelT>();
         if ( xy[0] >= width() || xy[1] >= height() )
-            core::exception_builder<std::out_of_range>()
-                << "point outside of image: [" << xy[0] << ", " << xy[1] << "], image is: "
-                << width() << "x" << height();
+            throw_point_out_of_range( xy );
 
         const pixel_format_info& fi{ info() };
         return *reinterpret_cast<PixelT*>( data_.get() + static_cast<size_t>(xy[1]) * pitch_ + static_cast<size_t>(xy[0]) * fi.bytes_per_pixel );
@@ -268,9 +267,35 @@ private:
     void check_pixel_type() const
     {
         if ( format_for_v<PixelT> != fmt_ )
-            core::exception_builder<std::runtime_error>()
-                << "pixel type mismatch: " << pixeltype_name<PixelT>()
-                << " does not match " << fmt_;
+            throw_pixel_type_mismatch<PixelT>();
+    }
+
+    /// error paths are isolated into cold, out-of-line functions:
+    /// their bodies construct formatted exception messages which
+    /// would otherwise prevent at() and friends from being inlined
+    /// into callers
+    template <typename PixelT>
+    [[gnu::cold, gnu::noinline]]
+    void throw_pixel_type_mismatch() const
+    {
+        core::exception_builder<std::runtime_error>()
+            << "pixel type mismatch: " << pixeltype_name<PixelT>()
+            << " does not match " << fmt_;
+    }
+
+    [[gnu::cold, gnu::noinline]]
+    void throw_pixel_index_out_of_range( index_t i ) const
+    {
+        core::exception_builder<std::out_of_range>()
+            << "pixel index out of range: " << i << ", max is: " << pixel_count();
+    }
+
+    [[gnu::cold, gnu::noinline]]
+    void throw_point_out_of_range( const point2<uint32_t>& xy ) const
+    {
+        core::exception_builder<std::out_of_range>()
+            << "point outside of image: [" << xy[0] << ", " << xy[1] << "], image is: "
+            << width() << "x" << height();
     }
 
     core::rect r_{};
