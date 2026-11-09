@@ -253,7 +253,8 @@ namespace openpiv::algos {
             // flip back: temp -> output
             transpose( cache().temp, cache().output );
 
-            // and unravel
+            // and unravel; all images are full complex images so rows
+            // advance by width
             const image& transformed = cache().output;
             image out_a( transformed.size(), pixel_format::COMPLEX_F64 );
             image out_b( transformed.size(), pixel_format::COMPLEX_F64 );
@@ -262,18 +263,25 @@ namespace openpiv::algos {
             const auto height = transformed.height();
             for ( uint32_t h=1; h<height/2; ++h)
             {
+                const c_f* src{ transformed.pixels<c_f>() + h*width };
+                const c_f* src_r{ transformed.pixels<c_f>() + (height - h)*width };
+                c_f* dst_a{ out_a.pixels<c_f>() + h*width };
+                c_f* dst_a_r{ out_a.pixels<c_f>() + (height - h)*width };
+                c_f* dst_b{ out_b.pixels<c_f>() + h*width };
+                c_f* dst_b_r{ out_b.pixels<c_f>() + (height - h)*width };
+
                 for (uint32_t w=1; w<width; ++w)
                 {
-                    const auto t1 = transformed.at<c_f>( {w, h} );
-                    const auto t2 = transformed.at<c_f>( {width - w, height - h} );
+                    const auto t1 = src[w];
+                    const auto t2 = src_r[width - w];
                     auto av = 0.5*(t1 + t2.conj());
-                    out_a.at<c_f>( {w, h} ) = av;
-                    out_a.at<c_f>( {width - w, height - h} ) = av.conj();
+                    dst_a[w] = av;
+                    dst_a_r[width - w] = av.conj();
 
                     auto bv = 0.5*(t1 - t2.conj());
                     bv = c_f(bv.imag, -1.0 * bv.real);
-                    out_b.at<c_f>( {w, h} ) = bv;
-                    out_b.at<c_f>( {width - w, height - h} ) = bv.conj();
+                    dst_b[w] = bv;
+                    dst_b_r[width - w] = bv.conj();
                 }
             }
 
