@@ -78,7 +78,7 @@ namespace openpiv::algos {
         /// may be any greyscale or complex image
         void to_complex( const image& in, image& out ) const
         {
-            if ( !in.info().is_mono && in.info().family != pixel_family::COMPLEX )
+            if ( !(in.info().is_mono || in.info().family == pixel_family::COMPLEX) )
                 core::exception_builder<std::runtime_error>()
                     << "transform requires a mono (greyscale or complex) image: " << in.format();
 
@@ -91,10 +91,13 @@ namespace openpiv::algos {
                     using ToT = c_f;
                     if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
                     {
+                        // \a in may be a sub-image, so advance rows
+                        // by the pitch; \a out is a full image
+                        const size_t in_stride{ in.pitch() / sizeof( FromT ) };
                         for ( uint32_t h = 0; h < in.height(); ++h )
                         {
-                            const FromT* s{ reinterpret_cast<const FromT*>( in.line( h ) ) };
-                            ToT* d{ reinterpret_cast<ToT*>( out.line( h ) ) };
+                            const FromT* s{ in.pixels<FromT>() + h * in_stride };
+                            ToT* d{ out.pixels<ToT>() + h * out.width() };
                             for ( uint32_t w = 0; w < in.width(); ++w )
                                 convert( *s++, *d++ );
                         }
@@ -122,13 +125,20 @@ namespace openpiv::algos {
                 [&]( auto tag )
                 {
                     using V = typename decltype( tag )::type;
+                    using PixelT = g<V>;
+
+                    // \a a and \a b may be sub-images, so advance
+                    // rows by the pitch
+                    const size_t a_stride{ a.pitch() / sizeof( PixelT ) };
+                    const size_t b_stride{ b.pitch() / sizeof( PixelT ) };
                     for ( uint32_t h = 0; h < a.height(); ++h )
                     {
-                        const V* pa{ reinterpret_cast<const V*>( a.line( h ) ) };
-                        const V* pb{ reinterpret_cast<const V*>( b.line( h ) ) };
-                        c_f* po{ reinterpret_cast<c_f*>( out.line( h ) ) };
+                        const PixelT* pa{ a.pixels<PixelT>() + h * a_stride };
+                        const PixelT* pb{ b.pixels<PixelT>() + h * b_stride };
+                        c_f* po{ out.pixels<c_f>() + h * out.width() };
                         for ( uint32_t w = 0; w < a.width(); ++w, ++pa, ++pb )
-                            *po++ = c_f{ static_cast<double>(*pa), static_cast<double>(*pb) };
+                            *po++ = c_f{ static_cast<double>( pa->v ),
+                                         static_cast<double>( pb->v ) };
                     }
                 } );
         }
@@ -148,12 +158,17 @@ namespace openpiv::algos {
                 [&]( auto tag )
                 {
                     using V = typename decltype( tag )::type;
+                    using PixelT = g<V>;
+
+                    // \a out may have a non-tight pitch, so advance
+                    // rows by the pitch; \a in is a full image
+                    const size_t out_stride{ out.pitch() / sizeof( PixelT ) };
                     for ( uint32_t h = 0; h < in.height(); ++h )
                     {
-                        const c_f* pi{ reinterpret_cast<const c_f*>( in.line( h ) ) };
-                        V* po{ reinterpret_cast<V*>( out.line( h ) ) };
+                        const c_f* pi{ in.pixels<c_f>() + h * in.width() };
+                        PixelT* po{ out.pixels<PixelT>() + h * out_stride };
                         for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
-                            *po++ = static_cast<V>( pi->real );
+                            *po++ = PixelT( static_cast<V>( pi->real ) );
                     }
                 } );
         }
@@ -186,15 +201,17 @@ namespace openpiv::algos {
             to_complex( input, cache().output );
 
             // iterate over rows first
-            for ( uint32_t h = 0; h < cache().output.height(); ++h )
-                fft( reinterpret_cast<c_f*>( cache().output.line( h ) ), cache().output.width(), d );
+            image& output{ cache().output };
+            for ( uint32_t h = 0; h < output.height(); ++h )
+                fft( output.pixels<c_f>() + h * output.width(), output.width(), d );
 
             // transpose output -> temp
             transpose( cache().output, cache().temp );
 
             // now do columns
-            for ( uint32_t h = 0; h < cache().temp.height(); ++h )
-                fft( reinterpret_cast<c_f*>( cache().temp.line( h ) ), cache().temp.width(), d );
+            image& columns{ cache().temp };
+            for ( uint32_t h = 0; h < columns.height(); ++h )
+                fft( columns.pixels<c_f>() + h * columns.width(), columns.width(), d );
 
             // flip back: temp -> output
             transpose( cache().temp, cache().output );
@@ -222,14 +239,16 @@ namespace openpiv::algos {
 
             // iterate over rows first
             for ( uint32_t h = 0; h < cache().output.height(); ++h )
-                fft( reinterpret_cast<c_f*>( cache().output.line( h ) ), cache().output.width(), d );
+                fft( cache().output.pixels<c_f>() + h * cache().output.width(),
+                     cache().output.width(), d );
 
             // transpose output -> temp
             transpose( cache().output, cache().temp );
 
             // now do columns
             for ( uint32_t h = 0; h < cache().temp.height(); ++h )
-                fft( reinterpret_cast<c_f*>( cache().temp.line( h ) ), cache().temp.width(), d );
+                fft( cache().temp.pixels<c_f>() + h * cache().temp.width(),
+                     cache().temp.width(), d );
 
             // flip back: temp -> output
             transpose( cache().temp, cache().output );
@@ -279,8 +298,8 @@ namespace openpiv::algos {
             // a_fft = fb * conj(a_fft)
             for ( uint32_t h = 0; h < a_fft.height(); ++h )
             {
-                const c_f* pb{ reinterpret_cast<const c_f*>( fb.line( h ) ) };
-                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                const c_f* pb{ fb.pixels<c_f>() + h * fb.width() };
+                c_f* pa{ a_fft.pixels<c_f>() + h * a_fft.width() };
                 for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
                     *pa = *pb++ * pa->conj();
             }
@@ -308,8 +327,8 @@ namespace openpiv::algos {
             // a_fft = b_fft * conj(a_fft)
             for ( uint32_t h = 0; h < a_fft.height(); ++h )
             {
-                const c_f* pb{ reinterpret_cast<const c_f*>( b_fft.line( h ) ) };
-                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                const c_f* pb{ b_fft.pixels<c_f>() + h * b_fft.width() };
+                c_f* pa{ a_fft.pixels<c_f>() + h * a_fft.width() };
                 for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
                     *pa = *pb++ * pa->conj();
             }
@@ -336,7 +355,7 @@ namespace openpiv::algos {
             // a_fft = abs_sqr( a_fft )
             for ( uint32_t h = 0; h < a_fft.height(); ++h )
             {
-                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
+                c_f* pa{ a_fft.pixels<c_f>() + h * a_fft.width() };
                 for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
                     *pa = c_f( pa->abs_sqr() );
             }
@@ -346,8 +365,8 @@ namespace openpiv::algos {
             image output( size_, pixel_format::COMPLEX_F64 );
             for ( uint32_t h = 0; h < output.height(); ++h )
             {
-                const c_f* pi{ reinterpret_cast<const c_f*>( fr.line( h ) ) };
-                c_f* po{ reinterpret_cast<c_f*>( output.line( h ) ) };
+                const c_f* pi{ fr.pixels<c_f>() + h * fr.width() };
+                c_f* po{ output.pixels<c_f>() + h * output.width() };
                 for ( uint32_t w = 0; w < output.width(); ++w, ++pi )
                     *po++ = c_f( pi->real );
             }
