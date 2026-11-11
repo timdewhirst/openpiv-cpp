@@ -565,11 +565,14 @@ void convert_pixel_range( const image& src, image& dst )
 {
     if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
     {
+        // \a src and \a dst may be sub-images, so advance rows by
+        // the pitch
         const size_t src_stride{ src.pitch() / sizeof( FromT ) };
+        const size_t dst_stride{ dst.pitch() / sizeof( ToT ) };
         for ( uint32_t h = 0; h < src.height(); ++h )
         {
             const FromT* s{ src.pixels<FromT>() + h * src_stride };
-            ToT* d{ dst.pixels<ToT>() + h * dst.width() };
+            ToT* d{ dst.pixels<ToT>() + h * dst_stride };
             for ( uint32_t w = 0; w < src.width(); ++w )
                 convert( *s++, *d++ );
         }
@@ -633,26 +636,19 @@ void convert_dispatch( const image& src, image& dst )
 
 } // namespace detail
 
-/// convert an image into \a dst; \a dst must be a full image of
-/// the requested format \a to and of the same size as \a src; \a
-/// src may be a sub-image. Pixel pairs for which no conversion
-/// exists are runtime errors
-inline image& convert( const image& src, pixel_format to, image& dst )
+/// convert the pixels of \a src into \a dst; \a dst must be of the
+/// same size and its format carries the requested image type; \a
+/// src and \a dst may be sub-images. Same-format conversions are
+/// straight copies; pixel pairs for which no conversion exists
+/// are runtime errors
+inline image& copy_convert( const image& src, image& dst )
 {
-    if ( to == pixel_format::UNKNOWN )
-        core::exception_builder<std::invalid_argument>()
-            << "destination format must be known: " << to;
-
-    if ( dst.format() != to )
-        core::exception_builder<std::invalid_argument>()
-            << "destination image format is " << dst.format() << ", expected " << to;
-
     if ( src.size() != dst.size() )
         core::exception_builder<std::runtime_error>()
-            << "convert: source and destination must have matching dimensions: "
+            << "copy_convert: source and destination must have matching dimensions: "
             << src.size() << ", " << dst.size();
 
-    if ( src.format() == to )
+    if ( src.format() == dst.format() )
     {
         // same format: straight copy
         const uint8_t bpp{ src.info().bytes_per_pixel };
@@ -667,7 +663,7 @@ inline image& convert( const image& src, pixel_format to, image& dst )
         detail::convert_dispatch< pixel_type_for_t< pixel_format::FMT > >( src, dst );         \
         break;
 
-    switch ( to )
+    switch ( dst.format() )
     {
         OPENPIV_TO_FORMAT_CASE( GREY_U8 )
         OPENPIV_TO_FORMAT_CASE( GREY_U16 )
@@ -701,7 +697,7 @@ inline image& convert( const image& src, pixel_format to, image& dst )
         OPENPIV_TO_FORMAT_CASE( COMPLEX_F64 )
         default:
             core::exception_builder<std::runtime_error>()
-                << "unsupported destination format: " << to;
+                << "unsupported destination format: " << dst.format();
     }
 
 #undef OPENPIV_TO_FORMAT_CASE
@@ -725,7 +721,7 @@ inline image convert( const image& src,
         return src.extract( core::rect::from_size( src.size() ), allocator );
 
     image dst{ src.size(), to, allocator };
-    convert( src, to, dst );
+    copy_convert( src, dst );
     return dst;
 }
 

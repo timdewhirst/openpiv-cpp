@@ -112,7 +112,7 @@ namespace openpiv::algos {
                 exception_builder< std::runtime_error >()
                     << "transform requires a mono (greyscale or complex) image: "
                     << input.format();
-            convert( input, pixel_format::COMPLEX_F64, cache().temp );
+            copy_convert( input, cache().temp );
 
             // can reinterpret core::complex to std::complex because core::complex
             // is packed and std::complex is also packed and makes guarantees about

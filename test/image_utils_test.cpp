@@ -335,18 +335,18 @@ TEST_CASE("image_utils_test - convert")
     for ( image::index_t i = 0; i < wide.pixel_count(); ++i )
         REQUIRE( doctest::matchers::WithinAbs( wide.at<g_f>( i ), grey.at<g_8>( i ), 1e-12 ) );
 
-    // out-parameter form: write into a provided image of the requested format
+    // out-parameter form: the destination carries the requested format
     image dst{ grey.size(), pixel_format::GREY_F32 };
-    convert( grey, pixel_format::GREY_F32, dst );
+    copy_convert( grey, dst );
     for ( image::index_t i = 0; i < dst.pixel_count(); ++i )
         REQUIRE( dst.at<g_f32>( i ) == g_f32( grey.at<g_8>( i ) ) );
 
-    // same-format conversion is a straight copy (sub-images are honoured;
-    // note that convert-into keeps the destination's rect, so compare
-    // content rather than geometry)
+    // same-format copy_convert is a straight copy (sub-image sources
+    // are honoured; the destination keeps its own rect and pitch, so
+    // compare content rather than geometry)
     image sub = grey.sub_image( core::rect{ { 2, 1 }, core::size{ 4, 2 } } );
     image sub_copy{ sub.size(), pixel_format::GREY_U8 };
-    convert( sub, pixel_format::GREY_U8, sub_copy );
+    copy_convert( sub, sub_copy );
     bool matched{ true };
     for ( image::index_t i = 0; i < sub.pixel_count(); ++i )
         if ( sub.at<g_8>( i ) != sub_copy.at<g_8>( i ) )
@@ -362,10 +362,13 @@ TEST_CASE("image_utils_test - convert")
     REQUIRE( same == grey );
     REQUIRE( same.rect() == grey.rect() );
 
-    // checks
-    image bad_fmt{ grey.size(), pixel_format::GREY_U8 };
+    // checks: the destination's format is the requested format, so
+    // only dimension and convertibility remain to validate
     image bad_size{ core::size{ 4, 4 }, pixel_format::GREY_F64 };
-    REQUIRE_THROWS_AS( convert( grey, pixel_format::GREY_F64, bad_fmt ), std::invalid_argument );
-    REQUIRE_THROWS_AS( convert( grey, pixel_format::GREY_F64, bad_size ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_convert( grey, bad_size ), std::runtime_error );
+    // unsupported pixel pair: complex -> rgb has no conversion
+    image cmplx{ 8, 4, pixel_format::COMPLEX_F64 };
+    image rgb_dst{ core::size{ 8, 4 }, pixel_format::RGB_U8 };
+    REQUIRE_THROWS_AS( copy_convert( cmplx, rgb_dst ), std::runtime_error );
     REQUIRE_THROWS_AS( convert( grey, pixel_format::UNKNOWN ), std::invalid_argument );
 }
