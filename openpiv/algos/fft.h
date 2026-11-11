@@ -41,12 +41,15 @@ namespace openpiv::algos {
         {
             image output;
             std::vector< c_f > fft_buffer;
-            image temp;
+            // fft scratch: gather segment followed by result segment
+            // for the 1-D passes (both sized to the larger plan
+            // dimension)
+            c_f* scratch[2];
 
             data_t( const core::size& s )
                 : output( s, pixel_format::COMPLEX_F64 )
-                , fft_buffer( maximal_size( s ).width() )
-                , temp( transpose( s ), pixel_format::COMPLEX_F64 )
+                , fft_buffer( 2 * maximal_size( s ).width() )
+                , scratch{ fft_buffer.data(), fft_buffer.data() + maximal_size( s ).width() }
             {}
         };
 
@@ -139,21 +142,15 @@ namespace openpiv::algos {
                     << input.format();
             copy_convert( input, cache().output );
 
-            // iterate over rows first
+            // iterate over rows (contiguous), then columns (strided
+            // in place - no transposes)
             image& output{ cache().output };
-            for ( uint32_t h = 0; h < output.height(); ++h )
-                fft( output.pixels<c_f>() + h * output.width(), output.width(), d );
-
-            // transpose output -> temp
-            copy_transpose( cache().output, cache().temp );
-
-            // now do columns
-            image& columns{ cache().temp };
-            for ( uint32_t h = 0; h < columns.height(); ++h )
-                fft( columns.pixels<c_f>() + h * columns.width(), columns.width(), d );
-
-            // flip back: temp -> output
-            copy_transpose( cache().temp, cache().output );
+            const uint32_t width{ output.width() };
+            const uint32_t height{ output.height() };
+            for ( uint32_t h = 0; h < height; ++h )
+                fft_1d( output.pixels<c_f>() + h * width, width, d, 1 );
+            for ( uint32_t w = 0; w < width; ++w )
+                fft_1d( output.pixels<c_f>() + w, height, d, width );
 
             return cache().output;
         }
@@ -176,21 +173,17 @@ namespace openpiv::algos {
             // copy data to (real, imag), converting to complex
             join_to_complex( a, b, cache().output );
 
-            // iterate over rows first
-            for ( uint32_t h = 0; h < cache().output.height(); ++h )
-                fft( cache().output.pixels<c_f>() + h * cache().output.width(),
-                     cache().output.width(), d );
-
-            // transpose output -> temp
-            copy_transpose( cache().output, cache().temp );
-
-            // now do columns
-            for ( uint32_t h = 0; h < cache().temp.height(); ++h )
-                fft( cache().temp.pixels<c_f>() + h * cache().temp.width(),
-                     cache().temp.width(), d );
-
-            // flip back: temp -> output
-            copy_transpose( cache().temp, cache().output );
+            // iterate over rows (contiguous), then columns (strided
+            // in place - no transposes)
+            {
+                image& output{ cache().output };
+                const uint32_t width{ output.width() };
+                const uint32_t height{ output.height() };
+                for ( uint32_t h = 0; h < height; ++h )
+                    fft_1d( output.pixels<c_f>() + h * width, width, d, 1 );
+                for ( uint32_t w = 0; w < width; ++w )
+                    fft_1d( output.pixels<c_f>() + w, height, d, width );
+            }
 
             // and unravel; all images are full complex images so rows
             // advance by width
@@ -344,13 +337,29 @@ namespace openpiv::algos {
             }
         }
 
-        void fft( c_f* in, size_t n, direction d, size_t stride = 1 ) const
+        /// 1-D FFT of \a n elements of \a data, spaced \a stride
+        /// elements apart in memory, in place. The gather into
+        /// scratch[0] is both the input for fft_inner and the
+        /// result for strided data before it is scattered back
+        void fft_1d( c_f* data, size_t n, direction d, size_t stride ) const
         {
             DECLARE_ENTRY_EXIT
 
-            typed_memcpy( cache().fft_buffer.data(), in, n, stride );
+            c_f* const src{ cache().scratch[0] };
+            c_f* const dst{ cache().scratch[1] };
             const auto& scaling = (d == direction::FORWARD ? forward_scaling_ : reverse_scaling_).at(n);
-            fft_inner( in, cache().fft_buffer.data(), &scaling[0], n, 1 );
+
+            typed_memcpy( src, data, n, stride );
+
+            if ( stride == 1 )
+                fft_inner( data, src, &scaling[0], n, 1 );
+            else
+            {
+                std::memcpy( dst, src, n * sizeof( c_f ) );
+                fft_inner( dst, src, &scaling[0], n, 1 );
+                for ( size_t i = 0; i < n; ++i )
+                    data[ i * stride ] = dst[i];
+            }
         }
 
         static scaling_map_t generate_scaling_factors( const core::size& size, direction d )
