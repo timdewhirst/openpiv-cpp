@@ -38,8 +38,8 @@ static void fft_cross_correlation_extract_benchmark(benchmark::State& state)
     size s{ d, d };
     FFT fft( s );
 
-    auto sub_a = im_a.extract( rect{ {0, 0}, s } );
-    auto sub_b = im_a.extract( rect{ {1, 1}, s } );
+    auto sub_a = im_a.sub_image( rect{ {0, 0}, s } ).detach();
+    auto sub_b = im_a.sub_image( rect{ {1, 1}, s } ).detach();
 
     for (auto _ : state)
     {
@@ -75,7 +75,7 @@ static void fft_auto_correlation_extract_benchmark(benchmark::State& state)
     size s{ d, d };
     FFT fft( s );
 
-    auto view_a = im_a.extract( rect{ {}, s } );
+    auto view_a = im_a.sub_image( rect{ {}, s } ).detach();
 
     for (auto _ : state)
     {

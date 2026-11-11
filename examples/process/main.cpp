@@ -211,8 +211,8 @@ int main( int argc, char* argv[] )
 
                          const auto t0 = std::chrono::high_resolution_clock::now();
 
-                         const auto view_a{ images[0].extract( ia ) };
-                         const auto view_b{ images[1].extract( ia ) };
+                         const auto view_a{ images[0].sub_image( ia ).detach() };
+                         const auto view_b{ images[1].sub_image( ia ).detach() };
                          const auto t1 = std::chrono::high_resolution_clock::now();
                          result.extract_dt = t1 - t0;
 

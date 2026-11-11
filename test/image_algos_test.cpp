@@ -33,7 +33,7 @@ TEST_CASE("image_algos_test - FFTTest")
 
     // transform
     FFT fft( im.size() );
-    image output{ fft.transform( im, direction::FORWARD ).clone() };
+    image output{ fft.transform( im, direction::FORWARD ).detach() };
 
     REQUIRE( save_to_file( "fft-output.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 
@@ -207,7 +207,7 @@ TEST_CASE("image_algos_test - fft_real_test")
 
     // transform
     FFT fft( data.size() );
-    image output{ fft.transform( data, direction::FORWARD ).clone() };
+    image output{ fft.transform( data, direction::FORWARD ).detach() };
     REQUIRE( output.format() == pixel_format::COMPLEX_F64 );
 
     // remove DC
@@ -228,7 +228,7 @@ TEST_CASE("image_algos_test - fft_real_test")
     REQUIRE( save_to_file( "fft_corr_a_conj.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 
     // inverse
-    output = fft.transform( convert( output, pixel_format::GREY_F64 ), direction::REVERSE ).clone();
+    output = fft.transform( convert( output, pixel_format::GREY_F64 ), direction::REVERSE ).detach();
     swap_quadrants( output );
 
     // write output

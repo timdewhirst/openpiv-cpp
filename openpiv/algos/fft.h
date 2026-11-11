@@ -3,6 +3,7 @@
 // std
 #include <algorithm>
 #include <exception>
+#include <format>
 #include <functional>
 #include <thread>
 #include <tuple>
@@ -120,7 +121,7 @@ namespace openpiv::algos {
 
         /// Perform a 2-D FFT; will always produce a complex
         /// floating point image output; note that the returned image
-        /// aliases the internal cache storage - copy (clone) or
+        /// aliases the internal cache storage - copy (detach) or
         /// transform the result before re-using this instance
         const image& transform( const image& input, direction d = direction::FORWARD ) const
         {
@@ -233,12 +234,13 @@ namespace openpiv::algos {
                          const image& b ) const
         {
             const pixel_format_info& ainfo{ a.info() };
-            if ( !ainfo.is_mono )
+            const pixel_format_info& binfo{ b.info() };
+            if ( !(ainfo.is_mono && binfo.is_mono) )
                 core::exception_builder<std::runtime_error>()
-                    << "cross_correlate requires greyscale images: " << a.format();
+                    << std::format("cross_correlate requires greyscale images: {}, {}", a.format(), b.format());
 
             const image& fa = transform( a, direction::FORWARD );
-            image a_fft{ fa.clone( image::scratch_allocator() ) };
+            image a_fft{ fa.detach( image::scratch_allocator() ) };
             const image& fb = transform( b, direction::FORWARD );
 
             // a_fft = fb * conj(a_fft)
@@ -296,7 +298,7 @@ namespace openpiv::algos {
                 core::exception_builder<std::runtime_error>()
                     << "auto_correlate requires a mono (greyscale or complex) image: " << a.format();
 
-            image a_fft{ transform( a, direction::FORWARD ).clone( image::scratch_allocator() ) };
+            image a_fft{ transform( a, direction::FORWARD ).detach( image::scratch_allocator() ) };
 
             // a_fft = abs_sqr( a_fft )
             for ( uint32_t h = 0; h < a_fft.height(); ++h )

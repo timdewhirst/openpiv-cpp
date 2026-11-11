@@ -113,28 +113,18 @@ public:
         return result;
     }
 
-    /// construct a deep copy of a region; \a r is in the local
-    /// coordinates of this image and must be wholly contained within
-    /// it; the result uses fresh storage and its rect() is positioned
-    /// as per sub_image()
-    image extract( const core::rect& r, const allocator_t& allocator = default_allocator() ) const
+    /// return an image with its own copy of the data; geometry,
+    /// including the rect position, is preserved - a deep copy of
+    /// a sub-image is a positioned, self-contained image
+    image detach( const allocator_t& allocator = default_allocator() ) const
     {
-        require_sub_rect( r );
+        image result{ r_, fmt_, allocator };
 
-        image result{ core::rect{ { r_.left() + r.left(), r_.bottom() + r.bottom() }, r.size() }, fmt_, allocator };
-        const size_t row_bytes{ static_cast<size_t>( r.width() ) * info().bytes_per_pixel };
-        const byte_t* src{ data_.get() + offset_of( r ) };
-        byte_t* dst{ result.data_.get() };
-        for ( uint32_t row = 0; row < static_cast<uint32_t>( r.height() ); ++row, src += pitch_, dst += result.pitch_ )
-            std::memcpy( dst, src, row_bytes );
+        const size_t row_bytes{ static_cast<size_t>( r_.width() ) * info().bytes_per_pixel };
+        for ( uint32_t row = 0; row < height(); ++row )
+            std::memcpy( result.line( row ), line( row ), row_bytes );
 
         return result;
-    }
-
-    /// full deep copy
-    image clone( const allocator_t& allocator = default_allocator() ) const
-    {
-        return extract( core::rect::from_size( r_.size() ), allocator );
     }
 
     /// equality; images are equal if they have the same geometry,

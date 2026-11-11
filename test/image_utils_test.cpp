@@ -147,7 +147,7 @@ TEST_CASE("image_utils_test - swap_quadrants")
         };
     fill( im, [&value_at]( uint32_t w, uint32_t h ) { return value_at( w, h, 8 ); } );
 
-    image original{ im.clone() };
+    image original{ im.detach() };
     swap_quadrants( im );
 
     // after swapping: q1 <-> q3, q2 <-> q4 (using (0,0) as the

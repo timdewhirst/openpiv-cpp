@@ -152,10 +152,7 @@ void add_image(py::module& m)
         .def( py::self == py::self )
         .def( py::self != py::self )
         .def( "sub_image", &image::sub_image )
-        .def( "extract",
-              []( const image& im, const core::rect& r ) { return im.extract( r ); },
-              py::arg( "rect" ) )
-        .def( "clone", []( const image& im ) { return im.clone(); } )
+        .def( "detach", []( const image& im ) { return im.detach(); } )
         .def( "width", &image::width )
         .def( "height", &image::height )
         .def( "size", &image::size )

@@ -98,8 +98,8 @@ TEST_CASE("image-external-allocation")
     const image alias{ im };
     CHECK( pool.pool->size() == 1 );
 
-    // extract allocates anew
-    const image sub{ im.extract( core::rect::from_size( {2, 2} ), allocator ) };
+    // detach allocates anew
+    const image sub{ im.sub_image( core::rect::from_size( {2, 2} ) ).detach( allocator ) };
     CHECK( pool.pool->size() == 2 );
 
     // default allocator is independent
@@ -202,16 +202,18 @@ TEST_CASE("image-shallow-copy-semantics")
     CHECK( im == alias ); // same geometry, format and content
 }
 
-TEST_CASE("image-extract-and-clone")
+TEST_CASE("image-sub-image-and-detach")
 {
     image im{ 10, 10, pixel_format::GREY_U8 };
     for ( image::index_t i = 0; i < im.pixel_count(); ++i )
         im.at<g_8>( i ) = g_8( static_cast<uint8_t>( i ) );
 
+    // a detached sub-image is the deep-copy form of extraction:
+    // fresh storage with the same content, translated rect and its
+    // own tight pitch
     const core::rect local{ { 4, 4 }, core::size{ 3, 2 } };
-    image sub = im.extract( local );
+    image sub = im.sub_image( local ).detach();
 
-    // fresh storage with the same content
     CHECK( sub != image{ 3, 2, pixel_format::GREY_U8 } ); // content differs from zero-image
     CHECK( sub.rect().bottomLeft() == core::rect::point_t( 4, 4 ) );
     CHECK( sub.pitch() == 3 ); // fresh image has its own tight pitch
@@ -222,30 +224,33 @@ TEST_CASE("image-extract-and-clone")
         CHECK( sub.at<g_8>( i ) == im.at<g_8>( core::point2<uint32_t>( 4 + x, 4 + y ) ) );
     }
 
-    // modifying the source afterwards does not affect the extract
+    // modifying the source afterwards does not affect the detached image
     im.at<g_8>( core::point2<uint32_t>( 4, 4 ) ) = g_8( 255 );
     // the parent image was filled with its linear index; the first
-    // pixel of the extract is linear index 4*10+4 in the parent
+    // pixel of the detached region is linear index 4*10+4 in the parent
     CHECK( sub.at<g_8>( 0 ) == g_8( static_cast<uint8_t>( 4 * 10 + 4 ) ) );
 
-    // clone is a positioned deep copy
-    image c = im.clone();
-    CHECK( c.rect() == im.rect() );
-    CHECK( c.pitch() == im.pitch() );
-    CHECK( c == im );
-    im.at<g_8>( 0 ) = g_8( 1 );
-    CHECK( c.at<g_8>( 0 ) != g_8( 1 ) );
-    CHECK( !( c == im ) );
-    CHECK( c != im );
+    // detach of a positioned source preserves the rect position -
+    // exercise at a non-zero origin, where a position drop would
+    // not be masked
+    image positioned{ core::rect{ { 7, 9 }, core::size{ 3, 3 } }, pixel_format::GREY_U8 };
+    for ( image::index_t i = 0; i < positioned.pixel_count(); ++i )
+        positioned.at<g_8>( i ) = g_8( static_cast<uint8_t>( i ) );
 
-    // extracted rect of a sub-image keeps its global position
+    image detached = positioned.detach();
+    CHECK( detached.rect() == positioned.rect() );
+    CHECK( detached.rect().bottomLeft() == core::rect::point_t( 7, 9 ) );
+    CHECK( detached == positioned );
+
+    // a detached sub-image of a sub-image keeps its global position
     image subview = im.sub_image( core::rect{ { 2, 2 }, core::size{ 5, 5 } } );
-    image extracted = subview.extract( core::rect{ { 1, 1 }, core::size{ 2, 2 } } );
+    image extracted = subview.sub_image( core::rect{ { 1, 1 }, core::size{ 2, 2 } } ).detach();
     CHECK( extracted.rect().bottomLeft() == core::rect::point_t( 3, 3 ) );
     CHECK( extracted.at<g_8>( 0 ) == im.at<g_8>( core::point2<uint32_t>( 3, 3 ) ) );
 
-    // bounds are enforced
-    REQUIRE_THROWS_AS( im.extract( core::rect{ { 8, 8 }, core::size{ 4, 4 } } ), std::out_of_range );
+    // bounds are enforced when forming the sub-image
+    REQUIRE_THROWS_AS( im.sub_image( core::rect{ { 8, 8 }, core::size{ 4, 4 } } ),
+                       std::out_of_range );
 }
 
 TEST_CASE("image-equality")
@@ -354,7 +359,7 @@ TEST_CASE("image-scratch-allocator")
 
     // deep copies out of scratch images work (and may default to
     // zero-initialised storage)
-    image copy = im.clone();
+    image copy = im.detach();
     REQUIRE( copy == im );
 
     // conversions into scratch destinations are fully written

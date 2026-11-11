@@ -718,7 +718,7 @@ inline image convert( const image& src,
             << "destination format must be known: " << to;
 
     if ( to == src.format() )
-        return src.extract( core::rect::from_size( src.size() ), allocator );
+        return src.detach( allocator );
 
     image dst{ src.size(), to, allocator };
     copy_convert( src, dst );
