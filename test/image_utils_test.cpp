@@ -301,5 +301,71 @@ TEST_CASE("image_utils_test - real")
     for ( image::index_t i = 0; i < re.pixel_count(); ++i )
         REQUIRE( re.at<g_f>( i ) == g_f( static_cast<double>( i*2 ) ) );
 
-    REQUIRE_THROWS_AS( real( image{ 4, 4, pixel_format::GREY_U8 } ), std::runtime_error );
+    // out-parameter form: extraction into any grey depth, with truncation
+    image out_u8{ im.size(), pixel_format::GREY_U8 };
+    real( im, out_u8 );
+    REQUIRE( out_u8.format() == pixel_format::GREY_U8 );
+    for ( image::index_t i = 0; i < out_u8.pixel_count(); ++i )
+        REQUIRE( out_u8.at<g_8>( i ) == g_8( static_cast<uint8_t>( i*2 ) ) );
+
+    // out-parameter form matches the by-value form at equal depth
+    image out_f64{ im.size(), pixel_format::GREY_F64 };
+    real( im, out_f64 );
+    REQUIRE( out_f64 == re );
+
+    // checks
+    image non_complex{ 4, 4, pixel_format::GREY_U8 };
+    image grey_out{ 4, 8, pixel_format::GREY_U8 };
+    image rgba_out{ 4, 4, pixel_format::RGBA_U8 };
+    REQUIRE_THROWS_AS( real( non_complex ), std::runtime_error );
+    REQUIRE_THROWS_AS( real( non_complex, grey_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( real( im, rgba_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( real( im, grey_out ), std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - convert")
+{
+    // by-value form: a new image of the same size with the requested format
+    image grey{ 8, 4, pixel_format::GREY_U8 };
+    fill( grey, []( uint32_t w, uint32_t h ) { return (w + 10*h) % 251; } );
+
+    image wide = convert( grey, pixel_format::GREY_F64 );
+    REQUIRE( wide.format() == pixel_format::GREY_F64 );
+    REQUIRE( wide.size() == grey.size() );
+    for ( image::index_t i = 0; i < wide.pixel_count(); ++i )
+        REQUIRE( doctest::matchers::WithinAbs( wide.at<g_f>( i ), grey.at<g_8>( i ), 1e-12 ) );
+
+    // out-parameter form: write into a provided image of the requested format
+    image dst{ grey.size(), pixel_format::GREY_F32 };
+    convert( grey, pixel_format::GREY_F32, dst );
+    for ( image::index_t i = 0; i < dst.pixel_count(); ++i )
+        REQUIRE( dst.at<g_f32>( i ) == g_f32( grey.at<g_8>( i ) ) );
+
+    // same-format conversion is a straight copy (sub-images are honoured;
+    // note that convert-into keeps the destination's rect, so compare
+    // content rather than geometry)
+    image sub = grey.sub_image( core::rect{ { 2, 1 }, core::size{ 4, 2 } } );
+    image sub_copy{ sub.size(), pixel_format::GREY_U8 };
+    convert( sub, pixel_format::GREY_U8, sub_copy );
+    bool matched{ true };
+    for ( image::index_t i = 0; i < sub.pixel_count(); ++i )
+        if ( sub.at<g_8>( i ) != sub_copy.at<g_8>( i ) )
+            matched = false;
+    CHECK( matched );
+
+    // round trip through two depths
+    image back = convert( convert( grey, pixel_format::GREY_F64 ), pixel_format::GREY_U8 );
+    REQUIRE( back == grey );
+
+    // same format with the by-value form is a positioned deep copy
+    image same = convert( grey, pixel_format::GREY_U8 );
+    REQUIRE( same == grey );
+    REQUIRE( same.rect() == grey.rect() );
+
+    // checks
+    image bad_fmt{ grey.size(), pixel_format::GREY_U8 };
+    image bad_size{ core::size{ 4, 4 }, pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( convert( grey, pixel_format::GREY_F64, bad_fmt ), std::invalid_argument );
+    REQUIRE_THROWS_AS( convert( grey, pixel_format::GREY_F64, bad_size ), std::runtime_error );
+    REQUIRE_THROWS_AS( convert( grey, pixel_format::UNKNOWN ), std::invalid_argument );
 }

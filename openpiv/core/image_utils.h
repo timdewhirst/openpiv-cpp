@@ -493,35 +493,240 @@ inline image join_complex_from_channels( const image& real_im, const image& imag
         } );
 }
 
+/// extract the real part of a complex image into \a out; \a out
+/// must be a greyscale image of the same size and may have any
+/// depth - values are truncated as required. Note: no abs, use
+/// convert() for magnitude
+inline image& real( const image& in, image& out )
+{
+    if ( in.info().family != pixel_family::COMPLEX )
+        core::exception_builder<std::runtime_error>()
+            << "real requires a complex image: " << in.format();
+
+    if ( out.info().family != pixel_family::GREY )
+        core::exception_builder<std::runtime_error>()
+            << "real output must be greyscale: " << out.format();
+
+    if ( in.size() != out.size() )
+        core::exception_builder<std::runtime_error>()
+            << "real: source images must have matching dimensions: "
+            << in.size() << ", " << out.size();
+
+    // note: \a in may be a sub-image, so advance rows by the pitch
+    dispatch_pixel_depth(
+        in.info().depth,
+        [&in, &out]( auto tag )
+        {
+            using FromT = typename decltype( tag )::type;
+            using PixelT = complex<FromT>;
+            const size_t in_stride{ in.pitch() / sizeof( PixelT ) };
+
+            dispatch_pixel_depth(
+                out.info().depth,
+                [&in, &out, &in_stride]( auto out_tag )
+                {
+                    using V = typename decltype( out_tag )::type;
+                    for ( uint32_t h = 0; h < in.height(); ++h )
+                    {
+                        const PixelT* pi{ in.pixels<PixelT>() + h * in_stride };
+                        V* po{ reinterpret_cast<V*>( out.line( h ) ) };
+                        for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
+                            *po++ = static_cast<V>( pi->real );
+                    }
+                } );
+        } );
+
+    return out;
+}
+
 /// extract the real part of a complex image as a greyscale image
 /// of the same depth (note: no abs, use convert() for magnitude)
 inline image real( const image& im )
 {
-
     if ( im.info().family != pixel_family::COMPLEX )
         core::exception_builder<std::runtime_error>()
             << "real requires a complex image: " << im.format();
 
-    return dispatch_pixel_depth(
-        im.info().depth,
-        [&im]( auto tag ) -> image
-        {
-            using V = typename decltype( tag )::type;
-            using PixelT = complex<V>;
+    // integral complex types are signed; grey types are unsigned,
+    // so map by depth
+    const pixel_format grey_format{ grey_format_for_depth( im.info().depth ) };
+    image result{ im.width(), im.height(), grey_format };
+    real( im, result );
+    return result;
+}
 
-            // integral complex types are signed; grey types are
-            // unsigned, so map by depth and copy components bitwise
-            const pixel_format grey_format{ grey_format_for_depth( im.info().depth ) };
-            image result{ im.width(), im.height(), grey_format };
-            for ( uint32_t h = 0; h < im.height(); ++h )
-            {
-                const PixelT* p{ reinterpret_cast<const PixelT*>( im.line( h ) ) };
-                V* r{ reinterpret_cast<V*>( result.line( h ) ) };
-                for ( uint32_t w = 0; w < im.width(); ++w, ++p )
-                    *r++ = p->real;
-            }
-            return result;
-        } );
+namespace detail {
+
+/// convert pixels from one compile-time pixel type to another,
+/// row by row; pairs for which no conversion exists are runtime
+/// errors; \a src may be a sub-image, \a dst must be a full image
+template <typename FromT, typename ToT>
+void convert_pixel_range( const image& src, image& dst )
+{
+    if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
+    {
+        const size_t src_stride{ src.pitch() / sizeof( FromT ) };
+        for ( uint32_t h = 0; h < src.height(); ++h )
+        {
+            const FromT* s{ src.pixels<FromT>() + h * src_stride };
+            ToT* d{ dst.pixels<ToT>() + h * dst.width() };
+            for ( uint32_t w = 0; w < src.width(); ++w )
+                convert( *s++, *d++ );
+        }
+    }
+    else
+    {
+        core::exception_builder<std::runtime_error>()
+            << "unsupported pixel conversion: " << format_for_v<FromT>
+            << " -> " << format_for_v<ToT>;
+    }
+}
+
+/// dispatch on the source pixel type
+template <typename ToT>
+void convert_dispatch( const image& src, image& dst )
+{
+#define OPENPIV_FROM_FORMAT_CASE( FMT )                                                       \
+    case pixel_format::FMT:                                                                   \
+        convert_pixel_range< pixel_type_for_t< pixel_format::FMT >, ToT >( src, dst );         \
+        break;
+
+    switch ( src.format() )
+    {
+        OPENPIV_FROM_FORMAT_CASE( GREY_U8 )
+        OPENPIV_FROM_FORMAT_CASE( GREY_U16 )
+        OPENPIV_FROM_FORMAT_CASE( GREY_U32 )
+        OPENPIV_FROM_FORMAT_CASE( GREY_F32 )
+        OPENPIV_FROM_FORMAT_CASE( GREY_F64 )
+        OPENPIV_FROM_FORMAT_CASE( RGB_U8 )
+        OPENPIV_FROM_FORMAT_CASE( RGB_U16 )
+        OPENPIV_FROM_FORMAT_CASE( RGB_U32 )
+        OPENPIV_FROM_FORMAT_CASE( RGB_F32 )
+        OPENPIV_FROM_FORMAT_CASE( RGB_F64 )
+        OPENPIV_FROM_FORMAT_CASE( RGBA_U8 )
+        OPENPIV_FROM_FORMAT_CASE( RGBA_U16 )
+        OPENPIV_FROM_FORMAT_CASE( RGBA_U32 )
+        OPENPIV_FROM_FORMAT_CASE( RGBA_F32 )
+        OPENPIV_FROM_FORMAT_CASE( RGBA_F64 )
+        OPENPIV_FROM_FORMAT_CASE( YUV_U8 )
+        OPENPIV_FROM_FORMAT_CASE( YUV_U16 )
+        OPENPIV_FROM_FORMAT_CASE( YUV_U32 )
+        OPENPIV_FROM_FORMAT_CASE( YUV_F32 )
+        OPENPIV_FROM_FORMAT_CASE( YUV_F64 )
+        OPENPIV_FROM_FORMAT_CASE( YUVA_U8 )
+        OPENPIV_FROM_FORMAT_CASE( YUVA_U16 )
+        OPENPIV_FROM_FORMAT_CASE( YUVA_U32 )
+        OPENPIV_FROM_FORMAT_CASE( YUVA_F32 )
+        OPENPIV_FROM_FORMAT_CASE( YUVA_F64 )
+        OPENPIV_FROM_FORMAT_CASE( COMPLEX_U8 )
+        OPENPIV_FROM_FORMAT_CASE( COMPLEX_U16 )
+        OPENPIV_FROM_FORMAT_CASE( COMPLEX_U32 )
+        OPENPIV_FROM_FORMAT_CASE( COMPLEX_F32 )
+        OPENPIV_FROM_FORMAT_CASE( COMPLEX_F64 )
+        default:
+            core::exception_builder<std::runtime_error>()
+                << "unsupported source format: " << src.format();
+    }
+
+#undef OPENPIV_FROM_FORMAT_CASE
+}
+
+} // namespace detail
+
+/// convert an image into \a dst; \a dst must be a full image of
+/// the requested format \a to and of the same size as \a src; \a
+/// src may be a sub-image. Pixel pairs for which no conversion
+/// exists are runtime errors
+inline image& convert( const image& src, pixel_format to, image& dst )
+{
+    if ( to == pixel_format::UNKNOWN )
+        core::exception_builder<std::invalid_argument>()
+            << "destination format must be known: " << to;
+
+    if ( dst.format() != to )
+        core::exception_builder<std::invalid_argument>()
+            << "destination image format is " << dst.format() << ", expected " << to;
+
+    if ( src.size() != dst.size() )
+        core::exception_builder<std::runtime_error>()
+            << "convert: source and destination must have matching dimensions: "
+            << src.size() << ", " << dst.size();
+
+    if ( src.format() == to )
+    {
+        // same format: straight copy
+        const uint8_t bpp{ src.info().bytes_per_pixel };
+        for ( uint32_t h = 0; h < src.height(); ++h )
+            std::memcpy( dst.line( h ), src.line( h ),
+                         static_cast<size_t>( src.width() ) * bpp );
+        return dst;
+    }
+
+#define OPENPIV_TO_FORMAT_CASE( FMT )                                                         \
+    case pixel_format::FMT:                                                                   \
+        detail::convert_dispatch< pixel_type_for_t< pixel_format::FMT > >( src, dst );         \
+        break;
+
+    switch ( to )
+    {
+        OPENPIV_TO_FORMAT_CASE( GREY_U8 )
+        OPENPIV_TO_FORMAT_CASE( GREY_U16 )
+        OPENPIV_TO_FORMAT_CASE( GREY_U32 )
+        OPENPIV_TO_FORMAT_CASE( GREY_F32 )
+        OPENPIV_TO_FORMAT_CASE( GREY_F64 )
+        OPENPIV_TO_FORMAT_CASE( RGB_U8 )
+        OPENPIV_TO_FORMAT_CASE( RGB_U16 )
+        OPENPIV_TO_FORMAT_CASE( RGB_U32 )
+        OPENPIV_TO_FORMAT_CASE( RGB_F32 )
+        OPENPIV_TO_FORMAT_CASE( RGB_F64 )
+        OPENPIV_TO_FORMAT_CASE( RGBA_U8 )
+        OPENPIV_TO_FORMAT_CASE( RGBA_U16 )
+        OPENPIV_TO_FORMAT_CASE( RGBA_U32 )
+        OPENPIV_TO_FORMAT_CASE( RGBA_F32 )
+        OPENPIV_TO_FORMAT_CASE( RGBA_F64 )
+        OPENPIV_TO_FORMAT_CASE( YUV_U8 )
+        OPENPIV_TO_FORMAT_CASE( YUV_U16 )
+        OPENPIV_TO_FORMAT_CASE( YUV_U32 )
+        OPENPIV_TO_FORMAT_CASE( YUV_F32 )
+        OPENPIV_TO_FORMAT_CASE( YUV_F64 )
+        OPENPIV_TO_FORMAT_CASE( YUVA_U8 )
+        OPENPIV_TO_FORMAT_CASE( YUVA_U16 )
+        OPENPIV_TO_FORMAT_CASE( YUVA_U32 )
+        OPENPIV_TO_FORMAT_CASE( YUVA_F32 )
+        OPENPIV_TO_FORMAT_CASE( YUVA_F64 )
+        OPENPIV_TO_FORMAT_CASE( COMPLEX_U8 )
+        OPENPIV_TO_FORMAT_CASE( COMPLEX_U16 )
+        OPENPIV_TO_FORMAT_CASE( COMPLEX_U32 )
+        OPENPIV_TO_FORMAT_CASE( COMPLEX_F32 )
+        OPENPIV_TO_FORMAT_CASE( COMPLEX_F64 )
+        default:
+            core::exception_builder<std::runtime_error>()
+                << "unsupported destination format: " << to;
+    }
+
+#undef OPENPIV_TO_FORMAT_CASE
+
+    return dst;
+}
+
+/// convert an image to \a to; \returns a new image of the same
+/// size with the requested format, using the pixel conversion
+/// functions of pixel_types.h; the result is positioned as per
+/// extract() when the format does not change
+inline image convert( const image& src,
+                      pixel_format to,
+                      const image::allocator_t& allocator = image::default_allocator() )
+{
+    if ( to == pixel_format::UNKNOWN )
+        core::exception_builder<std::invalid_argument>()
+            << "destination format must be known: " << to;
+
+    if ( to == src.format() )
+        return src.extract( core::rect::from_size( src.size() ), allocator );
+
+    image dst{ src.size(), to, allocator };
+    convert( src, to, dst );
+    return dst;
 }
 
 } // namespace openpiv::core

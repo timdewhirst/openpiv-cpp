@@ -85,63 +85,6 @@ namespace openpiv::algos {
             return { static_cast<long>( x ), static_cast<long>( y ) };
         }
 
-        /// fill \a out (complex floating point) from \a in; \a in
-        /// may be any greyscale or complex image
-        void to_complex( const image& in, image& out ) const
-        {
-            if ( !in.info().is_mono && in.info().family != pixel_family::COMPLEX )
-                core::exception_builder<std::runtime_error>()
-                    << "transform requires a mono (greyscale or complex) image: " << in.format();
-
-            dispatch_pixel_type(
-                in.format(),
-                [&in, &out]( auto tag )
-                {
-                    using FromT = typename decltype( tag )::type;
-                    using ToT = c_f;
-                    if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
-                    {
-                        for ( uint32_t h = 0; h < in.height(); ++h )
-                        {
-                            const FromT* s{ reinterpret_cast<const FromT*>( in.line( h ) ) };
-                            ToT* d{ reinterpret_cast<ToT*>( out.line( h ) ) };
-                            for ( uint32_t w = 0; w < in.width(); ++w )
-                                convert( *s++, *d++ );
-                        }
-                    }
-                    else
-                    {
-                        core::exception_builder<std::runtime_error>()
-                            << "no conversion to complex for format: " << in.format();
-                    }
-                } );
-        }
-
-        /// extract the real part of complex image \a in into the
-        /// greyscale image \a out of matching depth, truncating as
-        /// required
-        void to_mono_real( const image& in, image& out ) const
-        {
-            const pixel_format_info& oinfo{ out.info() };
-            if ( oinfo.family != pixel_family::GREY )
-                core::exception_builder<std::runtime_error>()
-                    << "output must be greyscale: " << out.format();
-
-            dispatch_pixel_depth(
-                oinfo.depth,
-                [&]( auto tag )
-                {
-                    using V = typename decltype( tag )::type;
-                    for ( uint32_t h = 0; h < in.height(); ++h )
-                    {
-                        const c_f* pi{ reinterpret_cast<const c_f*>( in.line( h ) ) };
-                        V* po{ reinterpret_cast<V*>( out.line( h ) ) };
-                        for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
-                            *po++ = static_cast<V>( pi->real );
-                    }
-                } );
-        }
-
     public:
         PocketFFT( const core::size& size )
             : size_(size)
@@ -165,7 +108,11 @@ namespace openpiv::algos {
             }
 
             // copy data, converting to complex
-            to_complex( input, cache().temp );
+            if ( !input.info().is_mono && input.info().family != pixel_family::COMPLEX )
+                exception_builder< std::runtime_error >()
+                    << "transform requires a mono (greyscale or complex) image: "
+                    << input.format();
+            convert( input, pixel_format::COMPLEX_F64, cache().temp );
 
             // can reinterpret core::complex to std::complex because core::complex
             // is packed and std::complex is also packed and makes guarantees about
@@ -261,7 +208,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            to_mono_real( transform( a_fft, direction::REVERSE ), output );
+            real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
@@ -291,7 +238,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, pixel_format::GREY_F64 );
-            to_mono_real( transform( a_fft, direction::REVERSE ), output );
+            real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;

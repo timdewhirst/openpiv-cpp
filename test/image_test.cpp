@@ -14,6 +14,7 @@
 
 // to be tested
 #include "core/image.h"
+#include "core/image_utils.h"
 
 using namespace openpiv;
 using namespace openpiv::core;

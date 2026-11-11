@@ -74,42 +74,6 @@ namespace openpiv::algos {
             return result;
         }
 
-        /// fill \a out (complex floating point) from \a in; \a in
-        /// may be any greyscale or complex image
-        void to_complex( const image& in, image& out ) const
-        {
-            if ( !(in.info().is_mono || in.info().family == pixel_family::COMPLEX) )
-                core::exception_builder<std::runtime_error>()
-                    << "transform requires a mono (greyscale or complex) image: " << in.format();
-
-            const pixel_format_info& info{ in.info() };
-            dispatch_pixel_type(
-                in.format(),
-                [&in, &out, &info]( auto tag )
-                {
-                    using FromT = typename decltype( tag )::type;
-                    using ToT = c_f;
-                    if constexpr ( pixeltype_is_convertible_v<FromT, ToT> )
-                    {
-                        // \a in may be a sub-image, so advance rows
-                        // by the pitch; \a out is a full image
-                        const size_t in_stride{ in.pitch() / sizeof( FromT ) };
-                        for ( uint32_t h = 0; h < in.height(); ++h )
-                        {
-                            const FromT* s{ in.pixels<FromT>() + h * in_stride };
-                            ToT* d{ out.pixels<ToT>() + h * out.width() };
-                            for ( uint32_t w = 0; w < in.width(); ++w )
-                                convert( *s++, *d++ );
-                        }
-                    }
-                    else
-                    {
-                        core::exception_builder<std::runtime_error>()
-                            << "no conversion to complex for format: " << in.format();
-                    }
-                } );
-        }
-
         /// fill out (complex floating point) with (first, second)
         /// from two real mono images
         void join_to_complex( const image& a, const image& b, image& out ) const
@@ -143,36 +107,6 @@ namespace openpiv::algos {
                 } );
         }
 
-        /// extract the real part of complex image \a in into the
-        /// greyscale image \a out of matching depth, truncating as
-        /// required
-        void to_mono_real( const image& in, image& out ) const
-        {
-            const pixel_format_info& oinfo{ out.info() };
-            if ( oinfo.family != pixel_family::GREY )
-                core::exception_builder<std::runtime_error>()
-                    << "output must be greyscale: " << out.format();
-
-            dispatch_pixel_depth(
-                oinfo.depth,
-                [&]( auto tag )
-                {
-                    using V = typename decltype( tag )::type;
-                    using PixelT = g<V>;
-
-                    // \a out may have a non-tight pitch, so advance
-                    // rows by the pitch; \a in is a full image
-                    const size_t out_stride{ out.pitch() / sizeof( PixelT ) };
-                    for ( uint32_t h = 0; h < in.height(); ++h )
-                    {
-                        const c_f* pi{ in.pixels<c_f>() + h * in.width() };
-                        PixelT* po{ out.pixels<PixelT>() + h * out_stride };
-                        for ( uint32_t w = 0; w < in.width(); ++w, ++pi )
-                            *po++ = PixelT( static_cast<V>( pi->real ) );
-                    }
-                } );
-        }
-
     public:
         FFT( const core::size& size )
             : size_(size)
@@ -198,7 +132,11 @@ namespace openpiv::algos {
             }
 
             // copy data, converting to complex
-            to_complex( input, cache().output );
+            if ( !input.info().is_mono && input.info().family != pixel_family::COMPLEX )
+                exception_builder< std::runtime_error >()
+                    << "transform requires a mono (greyscale or complex) image: "
+                    << input.format();
+            convert( input, pixel_format::COMPLEX_F64, cache().output );
 
             // iterate over rows first
             image& output{ cache().output };
@@ -313,7 +251,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            to_mono_real( transform( a_fft, direction::REVERSE ), output );
+            real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
@@ -342,7 +280,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            to_mono_real( transform( a_fft, direction::REVERSE ), output );
+            real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;

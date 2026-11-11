@@ -1,5 +1,6 @@
 // openpiv
 #include "core/image.h"
+#include "core/image_utils.h"
 #include "core/pixel_format.h"
 
 using namespace openpiv;
