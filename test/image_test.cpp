@@ -330,6 +330,47 @@ TEST_CASE("image-convert")
     REQUIRE_THROWS_AS( convert( grey, pixel_format::UNKNOWN ), std::invalid_argument );
 }
 
+TEST_CASE("image-scratch-allocator")
+{
+    // the scratch allocator skips zero-initialisation: a scratch
+    // image is safe once fully written, and behaves like any
+    // other image (sharing, sub-images) thereafter
+    image::allocator_t scratch{ image::scratch_allocator() };
+    image im{ 8, 8, pixel_format::GREY_U16, scratch };
+
+    fill( im, []( uint32_t w, uint32_t h ) { return w * 17 + h; } );
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+    {
+        const uint32_t w = static_cast<uint32_t>( i ) % im.width();
+        const uint32_t h = static_cast<uint32_t>( i ) / im.width();
+        REQUIRE( im.at<g_16>( i ) == g_16( w * 17 + h ) );
+    }
+
+    // scratch images can seed sub-images with inherited pitch
+    image sub = im.sub_image( core::rect{ { 2, 2 }, core::size{ 4, 4 } } );
+    fill( sub, 7.0 );
+    for ( image::index_t i = 0; i < sub.pixel_count(); ++i )
+        REQUIRE( sub.at<g_16>( i ) == g_16( 7 ) );
+
+    // deep copies out of scratch images work (and may default to
+    // zero-initialised storage)
+    image copy = im.clone();
+    REQUIRE( copy == im );
+
+    // conversions into scratch destinations are fully written
+    image grey{ 4, 4, pixel_format::GREY_U8 };
+    for ( image::index_t i = 0; i < grey.pixel_count(); ++i )
+        grey.at<g_8>( i ) = g_8( static_cast<uint8_t>( i ) );
+
+    image cx{ grey.size(), pixel_format::COMPLEX_F64, scratch };
+    copy_convert( grey, cx );
+    for ( image::index_t i = 0; i < grey.pixel_count(); ++i )
+    {
+        REQUIRE( cx.at<c_f>( i ).real == grey.at<g_8>( i ) );
+        REQUIRE( cx.at<c_f>( i ).imag == 0.0 );
+    }
+}
+
 TEST_CASE("image-swap-and-stream")
 {
     image a{ 2, 2, pixel_format::GREY_U8 };

@@ -52,6 +52,17 @@ public:
         };
     }
 
+    /// allocator for scratch images: the returned storage is
+    /// uninitialised. Use only for intermediates that are fully
+    /// written before being read; sharing semantics are unchanged
+    static allocator_t scratch_allocator()
+    {
+        return []( size_t bytes ) -> std::shared_ptr<byte_t>
+        {
+            return { new byte_t[ bytes ], []( byte_t* p ) { delete[] p; } };
+        };
+    }
+
     // ctor
     /// images are fixed in geometry and format at construction;
     /// there is no empty image
