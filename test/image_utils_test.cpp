@@ -111,14 +111,14 @@ TEST_CASE("image_utils_test - transpose")
 
     // two-stage transpose into a provided output
     image out{ 3, 7, pixel_format::GREY_U8 };
-    transpose( im, out );
+    copy_transpose( im, out );
     REQUIRE( out == t );
 
     // mismatched formats/dimensions are errors
     image wrong_format{ 7, 3, pixel_format::GREY_U16 };
     image wrong_dims{ 7, 3, pixel_format::GREY_U8 };
-    REQUIRE_THROWS_AS( transpose( im, wrong_format ), std::runtime_error );
-    REQUIRE_THROWS_AS( transpose( im, wrong_dims ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_transpose( im, wrong_format ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_transpose( im, wrong_dims ), std::runtime_error );
 
     // transpose of a sub-image
     image sub = im.sub_image( rect{ { 2, 1 }, size{ 3, 2 } } );
@@ -303,14 +303,14 @@ TEST_CASE("image_utils_test - real")
 
     // out-parameter form: extraction into any grey depth, with truncation
     image out_u8{ im.size(), pixel_format::GREY_U8 };
-    real( im, out_u8 );
+    copy_real( im, out_u8 );
     REQUIRE( out_u8.format() == pixel_format::GREY_U8 );
     for ( image::index_t i = 0; i < out_u8.pixel_count(); ++i )
         REQUIRE( out_u8.at<g_8>( i ) == g_8( static_cast<uint8_t>( i*2 ) ) );
 
     // out-parameter form matches the by-value form at equal depth
     image out_f64{ im.size(), pixel_format::GREY_F64 };
-    real( im, out_f64 );
+    copy_real( im, out_f64 );
     REQUIRE( out_f64 == re );
 
     // checks
@@ -318,9 +318,9 @@ TEST_CASE("image_utils_test - real")
     image grey_out{ 4, 8, pixel_format::GREY_U8 };
     image rgba_out{ 4, 4, pixel_format::RGBA_U8 };
     REQUIRE_THROWS_AS( real( non_complex ), std::runtime_error );
-    REQUIRE_THROWS_AS( real( non_complex, grey_out ), std::runtime_error );
-    REQUIRE_THROWS_AS( real( im, rgba_out ), std::runtime_error );
-    REQUIRE_THROWS_AS( real( im, grey_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( non_complex, grey_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( im, rgba_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( im, grey_out ), std::runtime_error );
 }
 
 TEST_CASE("image_utils_test - convert")

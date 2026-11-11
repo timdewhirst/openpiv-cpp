@@ -208,7 +208,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            real( transform( a_fft, direction::REVERSE ), output );
+            copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
@@ -238,7 +238,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, pixel_format::GREY_F64 );
-            real( transform( a_fft, direction::REVERSE ), output );
+            copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;

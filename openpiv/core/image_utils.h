@@ -148,7 +148,7 @@ inline double pixel_sum( const image& im )
 /// pre-condition (and the formats equal).
 ///
 /// \returns a reference to \a out.
-inline image& transpose( const image& in, image& out )
+inline image& copy_transpose( const image& in, image& out )
 {
     if ( in.format() != out.format() ||
          !(in.width() == out.height() && in.height() == out.width() ) )
@@ -183,7 +183,7 @@ inline image& transpose( const image& in, image& out )
 inline image transpose( const image& im )
 {
     image out{ im.height(), im.width(), im.format() };
-    transpose( im, out );
+    copy_transpose( im, out );
     return out;
 }
 
@@ -497,7 +497,7 @@ inline image join_complex_from_channels( const image& real_im, const image& imag
 /// must be a greyscale image of the same size and may have any
 /// depth - values are truncated as required. Note: no abs, use
 /// convert() for magnitude
-inline image& real( const image& in, image& out )
+inline image& copy_real( const image& in, image& out )
 {
     if ( in.info().family != pixel_family::COMPLEX )
         core::exception_builder<std::runtime_error>()
@@ -551,7 +551,7 @@ inline image real( const image& im )
     // so map by depth
     const pixel_format grey_format{ grey_format_for_depth( im.info().depth ) };
     image result{ im.width(), im.height(), grey_format };
-    real( im, result );
+    copy_real( im, result );
     return result;
 }
 

@@ -144,7 +144,7 @@ namespace openpiv::algos {
                 fft( output.pixels<c_f>() + h * output.width(), output.width(), d );
 
             // transpose output -> temp
-            transpose( cache().output, cache().temp );
+            copy_transpose( cache().output, cache().temp );
 
             // now do columns
             image& columns{ cache().temp };
@@ -152,7 +152,7 @@ namespace openpiv::algos {
                 fft( columns.pixels<c_f>() + h * columns.width(), columns.width(), d );
 
             // flip back: temp -> output
-            transpose( cache().temp, cache().output );
+            copy_transpose( cache().temp, cache().output );
 
             return cache().output;
         }
@@ -181,7 +181,7 @@ namespace openpiv::algos {
                      cache().output.width(), d );
 
             // transpose output -> temp
-            transpose( cache().output, cache().temp );
+            copy_transpose( cache().output, cache().temp );
 
             // now do columns
             for ( uint32_t h = 0; h < cache().temp.height(); ++h )
@@ -189,7 +189,7 @@ namespace openpiv::algos {
                      cache().temp.width(), d );
 
             // flip back: temp -> output
-            transpose( cache().temp, cache().output );
+            copy_transpose( cache().temp, cache().output );
 
             // and unravel; all images are full complex images so rows
             // advance by width
@@ -251,7 +251,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            real( transform( a_fft, direction::REVERSE ), output );
+            copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
@@ -280,7 +280,7 @@ namespace openpiv::algos {
             }
 
             image output( size_, a.format() );
-            real( transform( a_fft, direction::REVERSE ), output );
+            copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
             return output;
