@@ -187,12 +187,30 @@ namespace openpiv::algos {
 
             // and unravel; all images are full complex images so rows
             // advance by width
+            //
+            // the scratch allocator skips zero-initialisation; the
+            // unravel leaves row 0, row height/2 and column 0 of
+            // the results untouched (they read as zero), so those
+            // are zeroed explicitly - far less work than
+            // initialising the whole images
             const image& transformed = cache().output;
-            image out_a( transformed.size(), pixel_format::COMPLEX_F64 );
-            image out_b( transformed.size(), pixel_format::COMPLEX_F64 );
+            image out_a( transformed.size(), pixel_format::COMPLEX_F64, image::scratch_allocator() );
+            image out_b( transformed.size(), pixel_format::COMPLEX_F64, image::scratch_allocator() );
 
             const auto width = transformed.width();
             const auto height = transformed.height();
+
+            const auto zero_unwritten = [ & ]( image& im )
+                {
+                    c_f* base{ im.pixels<c_f>() };
+                    std::fill_n( base, width, c_f{} );                    // row 0
+                    std::fill_n( base + (height/2)*width, width, c_f{} ); // row height/2
+                    for ( uint32_t h = 0; h < height; ++h )
+                        base[ h*width ] = c_f{};                           // column 0
+                };
+            zero_unwritten( out_a );
+            zero_unwritten( out_b );
+
             for ( uint32_t h=1; h<height/2; ++h)
             {
                 const c_f* src{ transformed.pixels<c_f>() + h*width };
