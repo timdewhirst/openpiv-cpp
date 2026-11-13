@@ -199,17 +199,13 @@ namespace openpiv::algos {
             const image& fb = transform( b, direction::FORWARD );
 
             // a_fft = fb * conj(a_fft)
-            for ( uint32_t h = 0; h < a_fft.height(); ++h )
-            {
-                const c_f* pb{ reinterpret_cast<const c_f*>( fb.line( h ) ) };
-                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
-                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
-                    *pa = *pb++ * pa->conj();
-            }
+            apply<c_f>( fb, fa, a_fft, []( const c_f& x, const c_f& y )
+                {
+                    return x * y.conj();
+                } );
 
             image output( size_, a.format() );
-            copy_real( transform( a_fft, direction::REVERSE ), output );
-            swap_quadrants( output );
+            copy_real_swap_quadrants( transform( a_fft, direction::REVERSE ), output );
 
             return output;
         }
@@ -229,17 +225,13 @@ namespace openpiv::algos {
             auto [a_fft, b_fft] = transform_real( a, b, direction::FORWARD );
 
             // a_fft = b_fft * conj(a_fft)
-            for ( uint32_t h = 0; h < a_fft.height(); ++h )
-            {
-                const c_f* pb{ reinterpret_cast<const c_f*>( b_fft.line( h ) ) };
-                c_f* pa{ reinterpret_cast<c_f*>( a_fft.line( h ) ) };
-                for ( uint32_t w = 0; w < a_fft.width(); ++w, ++pa )
-                    *pa = *pb++ * pa->conj();
-            }
+            apply<c_f>( b_fft, a_fft, a_fft, []( const c_f& x, const c_f& y )
+                {
+                    return x * y.conj();
+                } );
 
             image output( size_, pixel_format::GREY_F64 );
-            copy_real( transform( a_fft, direction::REVERSE ), output );
-            swap_quadrants( output );
+            copy_real_swap_quadrants( transform( a_fft, direction::REVERSE ), output );
 
             return output;
         }
@@ -266,15 +258,24 @@ namespace openpiv::algos {
 
             const image& fr = transform( a_fft, direction::REVERSE );
 
+            // extract the real part of the reverse transform into
+            // the output (a complex image with zero imaginary part,
+            // matching the legacy behaviour) while swapping
+            // quadrants - a single pass
             image output( size_, pixel_format::COMPLEX_F64 );
+            const uint32_t half_w{ output.width() / 2 };
+            const uint32_t half_h{ output.height() / 2 };
             for ( uint32_t h = 0; h < output.height(); ++h )
             {
-                const c_f* pi{ reinterpret_cast<const c_f*>( fr.line( h ) ) };
-                c_f* po{ reinterpret_cast<c_f*>( output.line( h ) ) };
-                for ( uint32_t w = 0; w < output.width(); ++w, ++pi )
-                    *po++ = c_f( pi->real );
+                const c_f* pi{ fr.pixels<c_f>() + h * fr.width() };
+                const uint32_t dst_h{ h < half_h ? h + half_h : h - half_h };
+                c_f* po{ output.pixels<c_f>() + dst_h * output.width() };
+                for ( uint32_t w = 0; w < half_w; ++w )
+                {
+                    po[ w + half_w ] = c_f( pi[ w ].real );
+                    po[ w ] = c_f( pi[ w + half_w ].real );
+                }
             }
-            swap_quadrants( output );
 
             return output;
         }
