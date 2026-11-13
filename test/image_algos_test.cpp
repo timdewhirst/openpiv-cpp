@@ -161,6 +161,51 @@ TEST_CASE("image_algos_test - cross_correlation_test")
     REQUIRE( max > min );
     const auto centre_value = self_output.at<g_f>( point2<uint32_t>( 64, 64 ) );
     REQUIRE( doctest::matchers::WithinAbs( centre_value, max, 1e-6 ) );
+
+    // correlation of the distinct windows must agree with the
+    // real-transform shortcut; regression test for a bug where an
+    // invalidated cache reference (the second transform overwrites
+    // the buffer the first result refers to) turned the complex
+    // correlation into a correlation of the second image with
+    // itself - masked by any self-correlation check
+    // correlation of the distinct windows must peak where the
+    // real-transform shortcut peaks; regression test for a bug
+    // where an invalidated cache reference (the second transform
+    // overwrites the buffer the first result refers to) turned the
+    // complex correlation into a correlation of the second image
+    // with itself - which peaks at the centre and is masked by any
+    // self-correlation check. Note that the complex and real
+    // correlation planes are not expected to agree element-wise or
+    // even closely: the real path historically leaves the DC and
+    // nyquist frequency lines at zero, so peak position is the
+    // comparison that holds
+    image cross_output{ fft.cross_correlate( view_a, view_b ) };
+    image via_real{ fft.cross_correlate_real( view_a, view_b ) };
+    REQUIRE( cross_output.format() == via_real.format() );
+    REQUIRE( cross_output.size() == via_real.size() );
+
+    const auto argmax = []( const image& im ) -> image::index_t
+        {
+            image::index_t best{ 0 };
+            double best_value{ im.at<g_f>( 0 ) };
+            for ( image::index_t i = 1; i < im.pixel_count(); ++i )
+                if ( im.at<g_f>( i ) > best_value )
+                {
+                    best = i;
+                    best_value = im.at<g_f>( i );
+                }
+            return best;
+        };
+
+    const image::index_t cross_peak{ argmax( cross_output ) };
+    const image::index_t real_peak{ argmax( via_real ) };
+    REQUIRE( cross_peak == real_peak );
+
+    // and a self-correlation peaks at the centre, which is a
+    // different position from the cross-correlation peak of the
+    // row-offset windows
+    const image::index_t self_peak{ argmax( self_output ) };
+    REQUIRE( cross_peak != self_peak );
 }
 
 TEST_CASE("image_algos_test - auto_correlation_test")

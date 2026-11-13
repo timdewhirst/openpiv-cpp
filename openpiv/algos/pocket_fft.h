@@ -198,8 +198,11 @@ namespace openpiv::algos {
             image a_fft{ fa.detach() };
             const image& fb = transform( b, direction::FORWARD );
 
-            // a_fft = fb * conj(a_fft)
-            apply<c_f>( fb, fa, a_fft, []( const c_f& x, const c_f& y )
+            // a_fft = fb * conj(a_fft); note that fa has been
+            // invalidated by the second transform (it aliases the
+            // cache), so the detached copy is used as the second
+            // source - dst aliases the second source
+            apply<c_f>( fb, a_fft, a_fft, []( const c_f& x, const c_f& y )
                 {
                     return x * y.conj();
                 } );
