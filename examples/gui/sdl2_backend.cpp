@@ -1,8 +1,15 @@
 
 #include "sdl2_backend.h"
 
+// std
+#include <cstdint>
+#include <optional>
+
 // openpiv
+#include "core/image_utils.h"
 #include "core/log.h"
+#include "core/pixel_format.h"
+#include "core/pixel_types.h"
 
 // imgui
 #include "imgui_impl_sdl2.h"
@@ -112,4 +119,92 @@ void SDL2Backend::end_frame()
 bool SDL2Backend::should_close() const
 {
     return done_;
+}
+
+ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
+{
+    using namespace openpiv::core;
+
+    if (im.width() == 0 || im.height() == 0) {
+        logger::error("cannot create texture from an empty image");
+        return ImTextureID_Invalid;
+    }
+
+    // the renderer displays rgba8: upload directly where possible,
+    // otherwise convert. The pixel conversion machinery covers the
+    // grey and rgba families at any depth; rgb has no rgba
+    // conversion, so it is expanded per channel here
+    const image* upload{&im};
+    std::optional<image> converted;
+
+    if (im.format() != pixel_format::RGBA_U8) {
+        switch (im.info().family) {
+        case pixel_family::GREY:
+        case pixel_family::RGBA:
+            converted = convert(im, pixel_format::RGBA_U8);
+            break;
+
+        case pixel_family::RGB:
+            converted = image( im.size(), pixel_format::RGBA_U8 );
+            dispatch_pixel_depth(
+                im.info().depth,
+                [&im, &converted]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    using PixelT = rgb<V>;
+
+                    // im may be a sub-image, so advance rows by the pitch
+                    const size_t in_stride{ im.pitch() / sizeof( PixelT ) };
+                    const size_t out_stride{ converted->pitch() / sizeof( rgba_8 ) };
+
+                    for ( uint32_t h = 0; h < im.height(); ++h )
+                    {
+                        const PixelT* in{ im.pixels<PixelT>() + h * in_stride };
+                        rgba_8* out{ converted->pixels<rgba_8>() + h * out_stride };
+                        for ( uint32_t w = 0; w < im.width(); ++w )
+                            out[w] = rgba_8( static_cast<uint8_t>( in[w].r ),
+                                             static_cast<uint8_t>( in[w].g ),
+                                             static_cast<uint8_t>( in[w].b ),
+                                             255 );
+                    }
+                } );
+            break;
+
+        default:
+            logger::error("unsupported pixel format for display: {}", im.format());
+            return ImTextureID_Invalid;
+        }
+
+        upload = &converted.value();
+    }
+
+    // packed rgba_8 (r, g, b, a) matches the memory layout of
+    // SDL_PIXELFORMAT_RGBA8888
+    SDL_Texture* texture = SDL_CreateTexture(
+        renderer_,
+        SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_STATIC,
+        static_cast<int>(upload->width()),
+        static_cast<int>(upload->height()));
+
+    if (!texture) {
+        logger::error("failed to create SDL texture: {}", SDL_GetError());
+        return ImTextureID_Invalid;
+    }
+
+    SDL_UpdateTexture(texture,
+                      nullptr,
+                      upload->pixels<rgba_8>(),
+                      static_cast<int>(upload->pitch()));
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+    return static_cast<ImTextureID>( reinterpret_cast<intptr_t>(texture) );
+}
+
+void SDL2Backend::unload_image(ImTextureID texture)
+{
+    if (texture != ImTextureID_Invalid) {
+        SDL_DestroyTexture(
+            reinterpret_cast<SDL_Texture*>( static_cast<intptr_t>(texture) ));
+    }
 }
