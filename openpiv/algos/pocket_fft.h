@@ -156,6 +156,25 @@ namespace openpiv::algos {
             const image& in_a = a.info().depth == pixel_depth::F64 ? a : convert( a, pixel_format::GREY_F64 );
             const image& in_b = b.info().depth == pixel_depth::F64 ? b : convert( b, pixel_format::GREY_F64 );
 
+            // pocketfft's r2c emits the half spectrum along the last
+            // transformed axis (the height, here): rows 0..height/2
+            // of the full-size output are written and the remainder
+            // is left at zero. The input is real, so its spectrum is
+            // conjugate-symmetric: complete the missing rows before
+            // detaching, so the returned spectra are full and usable
+            // as complex spectra
+            const auto fill_mirrored_rows = []( image& im )
+                {
+                    const uint32_t width{ im.width() };
+                    const uint32_t height{ im.height() };
+                    c_f* p{ im.pixels<c_f>() };
+
+                    for ( uint32_t h = height/2 + 1; h < height; ++h )
+                        for ( uint32_t w = 0; w < width; ++w )
+                            p[ h*width + w ] =
+                                p[ (height - h)*width + ( (width - w) % width ) ].conj();
+                };
+
             pfft::r2c<double>(
                 shape(),
                 strides( in_a ),
@@ -165,6 +184,7 @@ namespace openpiv::algos {
                 reinterpret_cast<const double*>( in_a.data() ),
                 reinterpret_cast<std::complex<double>*>( cache().output.data() ),
                 1.0 );
+            fill_mirrored_rows( cache().output );
 
             image out_a{ cache().output.detach() };
 
@@ -177,6 +197,7 @@ namespace openpiv::algos {
                 reinterpret_cast<const double*>( in_b.data() ),
                 reinterpret_cast<std::complex<double>*>( cache().temp.data() ),
                 1.0 );
+            fill_mirrored_rows( cache().temp );
 
             image out_b{ cache().temp.detach() };
 

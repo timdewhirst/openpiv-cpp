@@ -13,6 +13,7 @@
 
 // to be tested
 #include "algos/fft.h"
+#include "algos/pocket_fft.h"
 #include "algos/stats.h"
 #include "core/image_utils.h"
 #include "loaders/image_loader.h"
@@ -239,6 +240,52 @@ TEST_CASE("image_algos_test - correlation plane equivalence (FFT)")
     }
     REQUIRE( scale > 0.0 );
     REQUIRE( max_err < 1e-9 * scale );
+}
+
+TEST_CASE("image_algos_test - correlation plane equivalence (PocketFFT)")
+{
+    // load images
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
+
+    // extract a couple of small windows offset relative to each
+    // other so the correlation is a genuine cross-correlation
+    size s{ 128, 128 };
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
+
+    FFT fft( view_a.size() );
+    PocketFFT pocket( view_a.size() );
+
+    // both PocketFFT correlations must match the (ground-truth
+    // validated) complex-transform plane to floating-point noise:
+    // the complex path via c2c, the real path via the completed
+    // r2c half spectrum
+    image reference{ fft.cross_correlate( view_a, view_b ) };
+    image via_pocket{ pocket.cross_correlate( view_a, view_b ) };
+    image via_pocket_real{ pocket.cross_correlate_real( view_a, view_b ) };
+
+    const auto max_plane_err = []( const image& lhs, const image& rhs ) -> std::pair<double, double>
+        {
+            double scale{ 0.0 };
+            double max_err{ 0.0 };
+            for ( image::index_t i = 0; i < lhs.pixel_count(); ++i )
+            {
+                const double l{ lhs.at<g_f>( i ) };
+                const double r{ rhs.at<g_f>( i ) };
+                scale = std::max( scale, std::abs( l ) );
+                max_err = std::max( max_err, std::abs( l - r ) );
+            }
+            return { scale, max_err };
+        };
+
+    const auto [scale_p, err_p] = max_plane_err( reference, via_pocket );
+    REQUIRE( scale_p > 0.0 );
+    REQUIRE( err_p < 1e-9 * scale_p );
+
+    const auto [scale_pr, err_pr] = max_plane_err( reference, via_pocket_real );
+    REQUIRE( scale_pr > 0.0 );
+    REQUIRE( err_pr < 1e-9 * scale_pr );
 }
 
 TEST_CASE("image_algos_test - auto_correlation_test")

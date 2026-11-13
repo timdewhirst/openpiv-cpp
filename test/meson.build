@@ -48,6 +48,7 @@ foreach i : range(test_sources.length())
     dependencies: [
       openpiv_dep,
       doctest_dep,
+      pocketfft_dep,
       threads_dep
     ],
   )
