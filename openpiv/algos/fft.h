@@ -186,11 +186,11 @@ namespace openpiv::algos {
             }
 
             // and unravel; all images are full complex images so rows
-            // advance by width
-            //
-            // the unravel leaves row 0, row height/2 and column 0 of
-            // the results untouched; those regions are semantic zeros
-            // guaranteed by the zero-initialising default allocator
+            // advance by width. A[k] = (Z[k] + conj(Z[-k]))/2 and
+            // B[k] = -i(Z[k] - conj(Z[-k]))/2 hold at every position
+            // of the packed transform - including the DC and nyquist
+            // lines (where they yield real values) - so both spectra
+            // are unravelled completely
             const image& transformed = cache().output;
             image out_a( transformed.size(), pixel_format::COMPLEX_F64 );
             image out_b( transformed.size(), pixel_format::COMPLEX_F64 );
@@ -198,29 +198,40 @@ namespace openpiv::algos {
             const auto width = transformed.width();
             const auto height = transformed.height();
 
-            for ( uint32_t h=1; h<height/2; ++h)
-            {
-                const c_f* src{ transformed.pixels<c_f>() + h*width };
-                const c_f* src_r{ transformed.pixels<c_f>() + (height - h)*width };
-                c_f* dst_a{ out_a.pixels<c_f>() + h*width };
-                c_f* dst_a_r{ out_a.pixels<c_f>() + (height - h)*width };
-                c_f* dst_b{ out_b.pixels<c_f>() + h*width };
-                c_f* dst_b_r{ out_b.pixels<c_f>() + (height - h)*width };
-
-                for (uint32_t w=1; w<width; ++w)
+            // unravel a pair of spectrum rows: row h and its mirror
+            // row height - h; for the self-mirrored rows (0 and
+            // height/2) both destination rows coincide and every
+            // write is consistent
+            const auto unravel_rows = [&]( uint32_t h, uint32_t h_r )
                 {
-                    const auto t1 = src[w];
-                    const auto t2 = src_r[width - w];
-                    auto av = 0.5*(t1 + t2.conj());
-                    dst_a[w] = av;
-                    dst_a_r[width - w] = av.conj();
+                    const c_f* src{ transformed.pixels<c_f>() + h*width };
+                    const c_f* src_r{ transformed.pixels<c_f>() + h_r*width };
+                    c_f* dst_a{ out_a.pixels<c_f>() + h*width };
+                    c_f* dst_a_r{ out_a.pixels<c_f>() + h_r*width };
+                    c_f* dst_b{ out_b.pixels<c_f>() + h*width };
+                    c_f* dst_b_r{ out_b.pixels<c_f>() + h_r*width };
 
-                    auto bv = 0.5*(t1 - t2.conj());
-                    bv = c_f(bv.imag, -1.0 * bv.real);
-                    dst_b[w] = bv;
-                    dst_b_r[width - w] = bv.conj();
-                }
-            }
+                    for ( uint32_t w = 0; w < width; ++w )
+                    {
+                        const uint32_t w_r{ ( width - w ) % width };
+
+                        const auto t1 = src[w];
+                        const auto t2 = src_r[w_r];
+                        auto av = 0.5*(t1 + t2.conj());
+                        dst_a[w] = av;
+                        dst_a_r[w_r] = av.conj();
+
+                        auto bv = 0.5*(t1 - t2.conj());
+                        bv = c_f(bv.imag, -1.0 * bv.real);
+                        dst_b[w] = bv;
+                        dst_b_r[w_r] = bv.conj();
+                    }
+                };
+
+            for ( uint32_t h = 1; h < height/2; ++h )
+                unravel_rows( h, height - h );
+            unravel_rows( 0, 0 );
+            unravel_rows( height/2, height/2 );
 
             return { out_a, out_b };
         }

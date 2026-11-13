@@ -174,11 +174,7 @@ TEST_CASE("image_algos_test - cross_correlation_test")
     // overwrites the buffer the first result refers to) turned the
     // complex correlation into a correlation of the second image
     // with itself - which peaks at the centre and is masked by any
-    // self-correlation check. Note that the complex and real
-    // correlation planes are not expected to agree element-wise or
-    // even closely: the real path historically leaves the DC and
-    // nyquist frequency lines at zero, so peak position is the
-    // comparison that holds
+    // self-correlation check
     image cross_output{ fft.cross_correlate( view_a, view_b ) };
     image via_real{ fft.cross_correlate_real( view_a, view_b ) };
     REQUIRE( cross_output.format() == via_real.format() );
@@ -206,6 +202,43 @@ TEST_CASE("image_algos_test - cross_correlation_test")
     // row-offset windows
     const image::index_t self_peak{ argmax( self_output ) };
     REQUIRE( cross_peak != self_peak );
+}
+
+TEST_CASE("image_algos_test - correlation plane equivalence (FFT)")
+{
+    // load images
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
+
+    // extract a couple of small windows offset relative to each
+    // other so the correlation is a genuine cross-correlation
+    size s{ 128, 128 };
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
+
+    FFT fft( view_a.size() );
+
+    // the real-transform shortcut computes F(b) * conj(F(a)) via a
+    // single packed FFT; with a complete unravel its correlation
+    // plane must match the complex-transform plane to within
+    // floating-point noise
+    image via_complex{ fft.cross_correlate( view_a, view_b ) };
+    image via_real{ fft.cross_correlate_real( view_a, view_b ) };
+
+    REQUIRE( via_complex.format() == via_real.format() );
+    REQUIRE( via_complex.size() == via_real.size() );
+
+    double scale{ 0.0 };
+    double max_err{ 0.0 };
+    for ( image::index_t i = 0; i < via_complex.pixel_count(); ++i )
+    {
+        const double c{ via_complex.at<g_f>( i ) };
+        const double r{ via_real.at<g_f>( i ) };
+        scale = std::max( scale, std::abs( c ) );
+        max_err = std::max( max_err, std::abs( c - r ) );
+    }
+    REQUIRE( scale > 0.0 );
+    REQUIRE( max_err < 1e-9 * scale );
 }
 
 TEST_CASE("image_algos_test - auto_correlation_test")
