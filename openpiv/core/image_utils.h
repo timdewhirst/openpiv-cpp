@@ -106,6 +106,52 @@ image& apply( image& im, OpT op )
     return im;
 }
 
+/// apply a binary pixel operation across two images, per pixel, in
+/// a single pass: \a dst receives op(a-pixel, b-pixel). \a dst may
+/// alias \a a or \a b - both source pixels are read before the
+/// destination is written. All three images must have matching
+/// dimensions; the op is evaluated for exactly the pixel type \a
+/// PixelT (as checked by pixels<PixelT>()), so family-specific
+/// pixel members may be used. The images may be sub-images,
+/// iterated via pitch-aware strides
+template <typename PixelT, typename OpT>
+image& apply( const image& a, const image& b, image& dst, OpT op )
+{
+    static_assert( std::is_invocable_r_v< PixelT, OpT, const PixelT&, const PixelT& >,
+                   "apply op must be invocable as op(const PixelT&, const PixelT&) -> PixelT" );
+
+    if ( a.size() != b.size() || b.size() != dst.size() )
+        core::exception_builder<std::runtime_error>()
+            << "apply: images must have matching dimensions: "
+            << a.size() << ", " << b.size() << ", " << dst.size();
+
+    if ( a.format() != b.format() || b.format() != dst.format() )
+        core::exception_builder<std::runtime_error>()
+            << "apply: images must have the same format: "
+            << a.format() << ", " << b.format() << ", " << dst.format();
+
+    // a, b and dst may be sub-images, so advance rows by the pitch
+    const size_t a_stride{ a.pitch() / sizeof( PixelT ) };
+    const size_t b_stride{ b.pitch() / sizeof( PixelT ) };
+    const size_t dst_stride{ dst.pitch() / sizeof( PixelT ) };
+
+    const PixelT* pa{ a.pixels<PixelT>() };
+    const PixelT* pb{ b.pixels<PixelT>() };
+    PixelT* pd{ dst.pixels<PixelT>() };
+
+    for ( uint32_t h = 0; h < dst.height(); ++h )
+    {
+        for ( uint32_t w = 0; w < dst.width(); ++w )
+            pd[ w ] = op( pa[ w ], pb[ w ] );
+
+        pa += a_stride;
+        pb += b_stride;
+        pd += dst_stride;
+    }
+
+    return dst;
+}
+
 /// find the sum of all pixels of a greyscale image; integral depths
 /// are accumulated exactly
 inline double pixel_sum( const image& im )
@@ -553,6 +599,74 @@ inline image real( const image& im )
     image result{ im.width(), im.height(), grey_format };
     copy_real( im, result );
     return result;
+}
+
+/// extract the real part of a complex image into \a out while
+/// exchanging quadrants - a single pass fusing copy_real() and
+/// swap_quadrants(); \a out must be a greyscale image of the same
+/// even-dimensioned size and may have any depth - values are
+/// truncated as required. Equivalent to copy_real() followed by
+/// swap_quadrants()
+inline image& copy_real_swap_quadrants( const image& in, image& out )
+{
+    if ( in.info().family != pixel_family::COMPLEX )
+        core::exception_builder<std::runtime_error>()
+            << "copy_real_swap_quadrants requires a complex image: " << in.format();
+
+    if ( out.info().family != pixel_family::GREY )
+        core::exception_builder<std::runtime_error>()
+            << "copy_real_swap_quadrants output must be greyscale: " << out.format();
+
+    if ( in.size() != out.size() )
+        core::exception_builder<std::runtime_error>()
+            << "copy_real_swap_quadrants: source images must have matching dimensions: "
+            << in.size() << ", " << out.size();
+
+    if ( in.width() % 2 || in.height() % 2 )
+        core::exception_builder<std::runtime_error>()
+            << "copy_real_swap_quadrants requires even dimensions: " << in.size();
+
+    const uint32_t half_w{ in.width() / 2 };
+    const uint32_t half_h{ in.height() / 2 };
+
+    // note: \a in and \a out may be sub-images, so advance rows by
+    // the pitch; each source row lands contiguously on the target
+    // row, right half first, so no per-pixel modulo is needed
+    dispatch_pixel_depth(
+        in.info().depth,
+        [&in, &out, half_w, half_h]( auto tag )
+        {
+            using FromT = typename decltype( tag )::type;
+            using PixelT = complex<FromT>;
+
+            dispatch_pixel_depth(
+                out.info().depth,
+                [&in, &out, &half_w, &half_h]( auto out_tag )
+                {
+                    using V = typename decltype( out_tag )::type;
+                    using GreyT = g<V>;
+
+                    const size_t in_stride{ in.pitch() / sizeof( PixelT ) };
+                    const size_t out_stride{ out.pitch() / sizeof( GreyT ) };
+                    const PixelT* pi{ in.pixels<PixelT>() };
+                    GreyT* po{ out.pixels<GreyT>() };
+
+                    // source row h of the top half maps to output row
+                    // h + half_h, the bottom half to h - half_h
+                    for ( uint32_t h = 0; h < in.height(); ++h )
+                    {
+                        const uint32_t dst_h{ h < half_h ? h + half_h : h - half_h };
+                        for ( uint32_t w = 0; w < half_w; ++w )
+                            po[ dst_h * out_stride + w + half_w ] =
+                                GreyT( static_cast<V>( pi[ h * in_stride + w ].real ) );
+                        for ( uint32_t w = half_w; w < in.width(); ++w )
+                            po[ dst_h * out_stride + w - half_w ] =
+                                GreyT( static_cast<V>( pi[ h * in_stride + w ].real ) );
+                    }
+                } );
+        } );
+
+    return out;
 }
 
 namespace detail {

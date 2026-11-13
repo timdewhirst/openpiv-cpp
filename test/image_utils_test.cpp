@@ -77,6 +77,58 @@ TEST_CASE("image_utils_test - apply")
         REQUIRE( im.at<g_8>( i ) == g_8( static_cast<uint8_t>( i ) ) );
 }
 
+TEST_CASE("image_utils_test - apply_two_images")
+{
+    // out-of-place: dst = a * b
+    image a{ 4, 4, pixel_format::COMPLEX_F64 };
+    image b{ 4, 4, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < a.pixel_count(); ++i )
+    {
+        a.at<c_f>( i ) = c_f( static_cast<double>( i ), static_cast<double>( 1 + i ) );
+        b.at<c_f>( i ) = c_f( static_cast<double>( 2 ), static_cast<double>( 3 - i ) );
+    }
+
+    image dst{ a.size(), pixel_format::COMPLEX_F64 };
+    apply<c_f>( a, b, dst, []( const c_f& x, const c_f& y ) { return x * y; } );
+    for ( image::index_t i = 0; i < dst.pixel_count(); ++i )
+        REQUIRE( dst.at<c_f>( i ) == a.at<c_f>( i ) * b.at<c_f>( i ) );
+
+    // in-place: dst may alias one of the sources, and the op may
+    // use family-specific pixel members (complex conjugation here)
+    image inplace{ a.detach() };
+    apply<c_f>( b, inplace, inplace, []( const c_f& x, const c_f& y )
+        {
+            return x * y.conj();
+        } );
+    for ( image::index_t i = 0; i < inplace.pixel_count(); ++i )
+        REQUIRE( inplace.at<c_f>( i ) == b.at<c_f>( i ) * a.at<c_f>( i ).conj() );
+
+    // grey pixels are equally supported, and sources may be
+    // sub-images (pitch-aware strides)
+    image parent{ 8, 8, pixel_format::GREY_U16 };
+    fill( parent, []( uint32_t w, uint32_t h ) { return w + 10*h; } );
+    image lhs{ parent.sub_image( rect{ { 1, 1 }, size{ 4, 4 } } ) };
+    image rhs{ parent.sub_image( rect{ { 3, 2 }, size{ 4, 4 } } ) };
+    image grey_dst{ size{ 4, 4 }, pixel_format::GREY_U16 };
+    apply<g_16>( lhs, rhs, grey_dst, []( const g_16& x, const g_16& y ) { return x + y; } );
+    for ( uint32_t h = 0; h < 4; ++h )
+        for ( uint32_t w = 0; w < 4; ++w )
+            REQUIRE( grey_dst.at<g_16>( point2<uint32_t>( w, h ) ) ==
+                     lhs.at<g_16>( point2<uint32_t>( w, h ) ) +
+                     rhs.at<g_16>( point2<uint32_t>( w, h ) ) );
+
+    // mismatched dimensions and formats are errors
+    image bad_size{ size{ 4, 8 }, pixel_format::COMPLEX_F64 };
+    REQUIRE_THROWS_AS( apply<c_f>( a, b, bad_size,
+                                   []( const c_f& x, const c_f& ) { return x; } ),
+                       std::runtime_error );
+
+    image grey_src{ a.size(), pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( apply<c_f>( a, grey_src, dst,
+                                   []( const c_f& x, const c_f& ) { return x; } ),
+                       std::runtime_error );
+}
+
 TEST_CASE("image_utils_test - pixel_sum")
 {
     image im{ 10, 10, pixel_format::GREY_U8 };
@@ -321,6 +373,64 @@ TEST_CASE("image_utils_test - real")
     REQUIRE_THROWS_AS( copy_real( non_complex, grey_out ), std::runtime_error );
     REQUIRE_THROWS_AS( copy_real( im, rgba_out ), std::runtime_error );
     REQUIRE_THROWS_AS( copy_real( im, grey_out ), std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - copy_real_swap_quadrants")
+{
+    // 6x8 complex source; the real part carries a unique value per
+    // pixel and the imaginary part is non-zero, so any leakage of
+    // imaginary data is caught
+    image im{ 6, 8, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        im.at<c_f>( i ) = c_f( static_cast<double>( i ), static_cast<double>( 7 - i ) );
+
+    image fused{ im.size(), pixel_format::GREY_F64 };
+    copy_real_swap_quadrants( im, fused );
+
+    // equivalence with the two-pass composition
+    image twopass{ im.size(), pixel_format::GREY_F64 };
+    copy_real( im, twopass );
+    swap_quadrants( twopass );
+    REQUIRE( fused == twopass );
+
+    // explicit mapping: the value at source (w, h) lands at
+    // ((w+half_w) % width, (h+half_h) % height)
+    for ( uint32_t h = 0; h < im.height(); ++h )
+        for ( uint32_t w = 0; w < im.width(); ++w )
+            REQUIRE( fused.at<g_f>( point2<uint32_t>( ( w + 3 ) % 6, ( h + 4 ) % 8 ) ) ==
+                     g_f( im.at<c_f>( point2<uint32_t>( w, h ) ).real ) );
+
+    // depth conversion of the destination
+    image out_u8{ im.size(), pixel_format::GREY_U8 };
+    copy_real_swap_quadrants( im, out_u8 );
+    for ( uint32_t h = 0; h < im.height(); ++h )
+        for ( uint32_t w = 0; w < im.width(); ++w )
+            REQUIRE( out_u8.at<g_8>( point2<uint32_t>( ( w + 3 ) % 6, ( h + 4 ) % 8 ) ) ==
+                     g_8( static_cast<uint8_t>( im.at<c_f>( point2<uint32_t>( w, h ) ).real ) ) );
+
+    // sub-image sources (pitch-aware strides)
+    image parent{ 8, 8, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < parent.pixel_count(); ++i )
+        parent.at<c_f>( i ) = c_f( static_cast<double>( 64 - i ), static_cast<double>( i ) );
+    image sub{ parent.sub_image( rect{ { 2, 1 }, size{ 6, 6 } } ) };
+    image sub_fused{ size{ 6, 6 }, pixel_format::GREY_F64 };
+    copy_real_swap_quadrants( sub, sub_fused );
+    image sub_twopass{ size{ 6, 6 }, pixel_format::GREY_F64 };
+    copy_real( sub, sub_twopass );
+    swap_quadrants( sub_twopass );
+    REQUIRE( sub_fused == sub_twopass );
+
+    // checks: complex source, grey destination, matching
+    // even-dimensioned sizes
+    image grey_src{ 6, 8, pixel_format::GREY_F64 };
+    image grey_dst{ 6, 8, pixel_format::GREY_F64 };
+    image rgba_dst{ 6, 8, pixel_format::RGBA_U8 };
+    image odd{ 4, 3, pixel_format::COMPLEX_F64 };
+    image odd_out{ 4, 3, pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( odd, odd_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( im, odd_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( grey_src, grey_dst ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( im, rgba_dst ), std::runtime_error );
 }
 
 TEST_CASE("image_utils_test - convert")
