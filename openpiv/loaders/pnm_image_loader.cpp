@@ -1,20 +1,20 @@
-
 #include "loaders/pnm_image_loader.h"
 
 // std
 #include <array>
 #include <istream>
 #include <ostream>
+#include <vector>
 
 // local
 #include "core/image.h"
-#include "core/image_type_traits.h"
 #include "core/log.h"
 #include "core/util.h"
 #include "algos/stats.h"
 
 namespace {
 
+    using namespace openpiv;
     using namespace openpiv::core;
 
     template <int> constexpr uint16_t stobe( uint16_t v );
@@ -63,116 +63,6 @@ namespace {
 
         return result;
     }
-
-    ///
-    template < typename PixelT, uint16_t SampleN, uint16_t BitsPerSample >
-    image<PixelT> copy(std::istream& is, uint32_t width, uint32_t height);
-
-    // 8-bit greyscale to 16-bit greyscale
-    template <>
-    image_g_16 copy<g_16, 1, 8>(std::istream& is, uint32_t width, uint32_t height)
-    {
-        image_g_16 im(width, height, 0);
-
-        // copy per line
-        std::vector<char> buffer(width);
-        uint32_t h = 0;
-        while ( !is.eof() && h<height )
-        {
-            is.read( &buffer[0], width );
-            uint8_t* srcp = reinterpret_cast<uint8_t*>(&buffer[0]);
-            g_16* destp = im.line(h);
-            for ( uint32_t w=0; w<width; ++w )
-                *destp++ = *srcp++;
-
-            ++h;
-        }
-
-        return im;
-    }
-
-    // 16-bit greyscale to 16-bit greyscale
-    template <>
-    image_g_16 copy<g_16, 1, 16>(std::istream& is, uint32_t width, uint32_t height)
-    {
-        image_g_16 im(width, height, 0);
-
-        // copy per line
-        const size_t bytesPerLine = width * sizeof(g_16);
-        std::vector<char> buffer(bytesPerLine);
-        uint32_t h = 0;
-        while ( !is.eof() && h<height )
-        {
-            is.read( &buffer[0], bytesPerLine );
-            uint16_t* srcp = reinterpret_cast<uint16_t*>(&buffer[0]);
-            g_16* destp = im.line(h);
-            for ( uint32_t w=0; w<width; ++w )
-                *destp++ = betos<__BYTE_ORDER__>( *srcp++ );
-
-            ++h;
-        }
-
-
-        return im;
-    }
-
-    // 8-bit RGB to 16-bit RGBA
-    template <>
-    image_rgba_16 copy<rgba_16, 3, 8>(std::istream& is, uint32_t width, uint32_t height)
-    {
-        image_rgba_16 im(width, height, 0);
-
-        // copy per line
-        const size_t bytesPerLine = 3 * width;
-        std::vector<char> buffer( bytesPerLine );
-        uint32_t h = 0;
-        while ( !is.eof() && h<height )
-        {
-            is.read( &buffer[0], bytesPerLine );
-            rgba_16* destp = im.line(h);
-            char* srcp = &buffer[0];
-            for ( size_t w=0; w<width; ++w )
-            {
-                destp->r = *srcp++;
-                destp->g = *srcp++;
-                destp->b = *srcp++;
-                ++destp;
-            }
-
-            ++h;
-        }
-
-        return im;
-    }
-
-    // 16-bit RGB to 16-bit RGBA
-    template <>
-    image_rgba_16 copy<rgba_16, 3, 16>(std::istream& is, uint32_t width, uint32_t height)
-    {
-        image_rgba_16 im(width, height, 0);
-
-        // copy per line
-        const size_t bytesPerLine = 3 * width * sizeof(g_16);
-        std::vector<char> buffer( bytesPerLine );
-        uint32_t h = 0;
-        while ( !is.eof() && h<height )
-        {
-            is.read( &buffer[0], bytesPerLine );
-            rgba_16* destp = im.line(h);
-            uint16_t* srcp = reinterpret_cast<uint16_t*>(&buffer[0]);
-            for ( size_t w=0; w<width; ++w )
-            {
-                destp->r = betos<__BYTE_ORDER__>(*srcp++);
-                destp->g = betos<__BYTE_ORDER__>(*srcp++);
-                destp->b = betos<__BYTE_ORDER__>(*srcp++);
-                ++destp;
-            }
-
-            ++h;
-        }
-
-        return im;
-    }
 }
 
 namespace openpiv::core {
@@ -191,32 +81,49 @@ namespace openpiv::core {
             : is(is_)
         {}
 
-        // \a is must be placed after header data
-        template <typename PixelT>
-        bool extract( image<PixelT>& im ) const
+        /// \a is must be placed after header data; the format of the
+        /// resulting image is determined by the PNM type and depth
+        image extract() const
         {
-            if ( !valid )
-                return false;
-
-            // get image data
             if ( type == 5 )
             {
                 // binary greyscale
-                if ( depth > 255 )
-                    im = copy<g_16, 1, 16>( is, width, height );
-                else
-                    im = copy<g_16, 1, 8>( is, width, height );
+                image im( width, height, depth > 255 ? pixel_format::GREY_U16 : pixel_format::GREY_U8 );
+
+                for ( uint32_t h = 0; !is.eof() && h < height; ++h )
+                {
+                    is.read( reinterpret_cast<char*>( im.line( h ) ), im.pitch() );
+
+                    if ( im.format() == pixel_format::GREY_U16 )
+                    {
+                        // from (big-endian) file to machine order
+                        uint16_t* line{ reinterpret_cast<uint16_t*>( im.line( h ) ) };
+                        for ( uint32_t w = 0; w < width; ++w )
+                            line[w] = betos<__BYTE_ORDER__>( line[w] );
+                    }
+                }
+
+                return im;
             }
             else
             {
                 // binary RGB
-                if ( depth > 255 )
-                    im = copy<rgba_16, 3, 16>( is, width, height );
-                else
-                    im = copy<rgba_16, 3, 8>( is, width, height );
-            }
+                image im( width, height, depth > 255 ? pixel_format::RGB_U16 : pixel_format::RGB_U8 );
 
-            return true;
+                for ( uint32_t h = 0; !is.eof() && h < height; ++h )
+                {
+                    is.read( reinterpret_cast<char*>( im.line( h ) ), im.pitch() );
+
+                    if ( im.format() == pixel_format::RGB_U16 )
+                    {
+                        uint16_t* line{ reinterpret_cast<uint16_t*>( im.line( h ) ) };
+                        for ( uint32_t w = 0; w < 3*width; ++w )
+                            line[w] = betos<__BYTE_ORDER__>( line[w] );
+                    }
+                }
+
+                return im;
+            }
         }
     };
 
@@ -304,146 +211,151 @@ namespace openpiv::core {
         return true;
     }
 
-    bool pnm_image_loader::extract( size_t, image_g_16& im )
+    std::optional<image> pnm_image_loader::extract( size_t )
     {
-        return impl_->extract(im);
+        if ( !impl_ || !impl_->valid )
+            return std::nullopt;
+
+        return impl_->extract();
     }
 
-    bool pnm_image_loader::extract( size_t, image_g_f& im )
-    {
-        return impl_->extract(im);
-    }
+    namespace {
 
-    bool pnm_image_loader::extract( size_t, image_rgba_16& im )
-    {
-        return impl_->extract(im);
-    }
-
-    template < template <typename> class ImageT,
-               typename = typename std::enable_if_t< is_imagetype<ImageT<g_16>>::value >
-               >
-    void save_( std::ostream& os, const ImageT<g_16>& im )
-    {
-        os << "P5\n"
-           << "# created by pnm_image_loader\n"
-           << im.width() << " " << im.height() << "\n"
-           << "65535\n";
-
-        const size_t bytesPerLine{ im.width() * sizeof(image_g_16::pixel_t) };
-
-        std::vector<g_16> buffer( im.width() );
-        for ( uint32_t h=0; h<im.height(); ++h )
+        /// write a 16-bit sample directly, with scaling for
+        /// floating point data
+        inline uint16_t save_sample( double value, double min, double range )
         {
-            const g_16* p = im.line(h);
-            for ( uint32_t w=0; w<im.width(); ++w )
-            {
-                buffer[w] = stobe<__BYTE_ORDER__>( *(p + w) );
-            }
+            if ( range == 0.0 )
+                return 0;
 
-            os.write( reinterpret_cast<const char*>( &buffer[0] ), bytesPerLine );
+            // values in [0, 65535]
+            const double scaled{ 65535.0 * ( ( value - min ) / range ) };
+            if ( scaled <= 0.0 )
+                return 0;
+            if ( scaled >= 65535.0 )
+                return 65535;
+
+            return static_cast<uint16_t>( scaled );
         }
 
-        os.flush();
     }
 
-    void pnm_image_loader::save( std::ostream& os, const image_g_16& im ) const
+    void pnm_image_loader::save( std::ostream& os, const image& im ) const
     {
-        save_( os, im );
-    }
+        const pixel_format_info& info{ im.info() };
 
-    void pnm_image_loader::save( std::ostream& os, const image_g_16_view& im ) const
-    {
-        save_( os, im );
-    }
+        if ( im.data() == nullptr )
+            exception_builder<image_loader_exception>() << "cannot save empty image";
 
-    template < template <typename> class ImageT,
-               typename = typename std::enable_if_t< is_imagetype<ImageT<g_f>>::value >
-               >
-    void save_( std::ostream& os, const ImageT<g_f>& im )
-    {
-        auto [min, max] = algos::find_image_range( im );
-        auto range = max - min;
-        if ( max == min )
+        if ( info.is_mono )
         {
-            // single valued image; range should be 1
-            range = 1.0;
+            // PG5: greyscale, 16-bit samples
+            auto [min, max] = algos::find_image_range( im );
+            double range{ max - min };
+
+            os << "P5\n"
+               << "# created by pnm_image_loader\n"
+               << im.width() << " " << im.height() << "\n"
+               << "65535\n";
+
+            dispatch_pixel_depth(
+                info.depth,
+                [&os, &im, min, range]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    std::vector<uint16_t> buffer( im.width() );
+                    for ( uint32_t h = 0; h < im.height(); ++h )
+                    {
+                        const V* p{ reinterpret_cast<const V*>( im.line( h ) ) };
+                        for ( uint32_t w = 0; w < im.width(); ++w, ++p )
+                        {
+                            if constexpr ( std::is_integral_v<V> )
+                            {
+                                // integral values are written as-is
+                                buffer[w] = stobe<__BYTE_ORDER__>( static_cast<uint16_t>( *p ) );
+                            }
+                            else
+                            {
+                                // floating point values are scaled to [0, 65535]
+                                buffer[w] = stobe<__BYTE_ORDER__>(
+                                    save_sample( static_cast<double>( *p ), min, range ) );
+                            }
+                        }
+                        os.write( reinterpret_cast<const char*>( buffer.data() ),
+                                  buffer.size() * sizeof(uint16_t) );
+                    }
+                } );
+
+            os.flush();
+            return;
         }
 
-        // scale the image and write as 16-bit file
-        os << "P5\n"
-           << "# created by pnm_image_loader\n"
-           << im.width() << " " << im.height() << "\n"
-           << "65535\n";
-
-        const size_t bytesPerLine{ im.width() * sizeof(image_g_16::pixel_t) };
-
-        std::vector<g_16> buffer( im.width() );
-        for ( uint32_t h=0; h<im.height(); ++h )
+        if ( info.family == pixel_family::RGB ||
+             info.family == pixel_family::RGBA )
         {
-            g_16* bp = &buffer[0];
-            const g_f* ip = im.line(h);
-            for ( uint32_t w=0; w<im.width(); ++w )
-                *bp++ = stobe<__BYTE_ORDER__>( static_cast< uint16_t >( g_16::max() * ((*ip++ - min)/range) ) );
+            // P6: RGB, 16-bit per sample; alpha (if present) is dropped
+            os << "P6\n"
+               << "# created by pnm_image_loader\n"
+               << im.width() << " " << im.height() << "\n"
+               << "65535\n";
 
-            os.write( reinterpret_cast<const char*>( &buffer[0] ), bytesPerLine );
+            dispatch_pixel_depth(
+                info.depth,
+                [&os, &im, &info]( auto tag )
+                {
+                    using V = typename decltype( tag )::type;
+                    const auto channels{ info.channels };
+                    std::vector<uint16_t> buffer( 3 * im.width() );
+
+                    // floating point images are scaled to the full range
+                    double min{ 0.0 };
+                    double range{ 1.0 };
+                    if constexpr ( !std::is_integral_v<V> )
+                    {
+                        min = std::numeric_limits<double>::max();
+                        double max{ std::numeric_limits<double>::lowest() };
+                        for ( uint32_t h = 0; h < im.height(); ++h )
+                        {
+                            const V* p{ reinterpret_cast<const V*>( im.line( h ) ) };
+                            for ( size_t i = 0; i < channels * im.width(); ++i, ++p )
+                            {
+                                min = std::min( min, static_cast<double>( *p ) );
+                                max = std::max( max, static_cast<double>( *p ) );
+                            }
+                        }
+                        range = max - min;
+                    }
+
+                    for ( uint32_t h = 0; h < im.height(); ++h )
+                    {
+                        const V* p{ reinterpret_cast<const V*>( im.line( h ) ) };
+                        for ( uint32_t w = 0; w < im.width(); ++w, p += channels )
+                        {
+                            for ( size_t c = 0; c < 3; ++c )
+                            {
+                                if constexpr ( std::is_integral_v<V> )
+                                {
+                                    buffer[ 3*w + c ] =
+                                        stobe<__BYTE_ORDER__>( static_cast<uint16_t>( p[c] ) );
+                                }
+                                else
+                                {
+                                    buffer[ 3*w + c ] = stobe<__BYTE_ORDER__>(
+                                        save_sample( static_cast<double>( p[c] ), min, range ) );
+                                }
+                            }
+                        }
+                        os.write( reinterpret_cast<const char*>( buffer.data() ),
+                                  buffer.size() * sizeof(uint16_t) );
+                    }
+                } );
+
+            os.flush();
+            return;
         }
 
-        os.flush();
-    }
-
-    void pnm_image_loader::save( std::ostream& os, const image_g_f& im ) const
-    {
-        save_( os, im );
-    }
-
-    void pnm_image_loader::save( std::ostream& os, const image_g_f_view& im ) const
-    {
-        save_( os, im );
-    }
-
-
-    template < template <typename> class ImageT,
-               typename = typename std::enable_if_t< is_imagetype<ImageT<rgba_16>>::value >
-               >
-    void save_( std::ostream& os, const ImageT<rgba_16>& im )
-    {
-        os << "P6\n"
-           << "# created by pnm_image_loader\n"
-           << im.width() << " " << im.height() << "\n"
-           << "65535\n";
-
-        // only write RGB data, not RGBA
-        using sample_type = image_rgba_16::pixel_t::value_t;
-        const size_t sampleCount = im.width() * 3;
-        const size_t bytesPerLine{ sampleCount * sizeof(sample_type) };
-        std::vector<sample_type> buffer( bytesPerLine );
-
-        for ( uint32_t h=0; h<im.height(); ++h )
-        {
-            const rgba_16* src = im.line(h);
-            sample_type* dest = &buffer[0];
-            for ( uint32_t w=0; w<im.width(); ++w )
-            {
-                *dest++ = stobe<__BYTE_ORDER__>( src->r );
-                *dest++ = stobe<__BYTE_ORDER__>( src->g );
-                *dest++ = stobe<__BYTE_ORDER__>( src->b );
-                ++src;
-            }
-            os.write( reinterpret_cast<const char*>( &buffer[0] ), buffer.size() );
-        }
-
-        os.flush();
-    }
-
-    void pnm_image_loader::save( std::ostream& os, const image_rgba_16& im ) const
-    {
-        save_( os, im );
-    }
-
-    void pnm_image_loader::save( std::ostream& os, const image_rgba_16_view& im ) const
-    {
-        save_( os, im );
+        exception_builder<image_loader_exception>()
+            << "pnm_image_loader: unsupported image format for saving: " << im.format();
     }
 
 }
-

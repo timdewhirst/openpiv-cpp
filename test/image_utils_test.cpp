@@ -5,392 +5,480 @@
 #include "doctest_utils.h"
 
 // std
-#include <fstream>
-#include <iostream>
+#include <cstdint>
 #include <numeric>
 #include <sstream>
-#include <string>
-#include <tuple>
-
-// local
-#include "test_utils.h"
 
 // to be tested
-#include "core/image.h"
 #include "core/image_utils.h"
-#include "core/image_view.h"
-#include "core/range.h"
-#include "core/stream_utils.h"
-#include "core/util.h"
-#include "loaders/image_loader.h"
-#include "algos/stats.h"
 
+using namespace openpiv;
 using namespace openpiv::core;
-using namespace openpiv::algos;
-namespace logger = openpiv::core::logger;
 
-TEST_CASE("image_utils_test - constant_fill_test")
+TEST_CASE("image_utils_test - fill")
 {
-    image_g_8 im; g_8 v;
-    std::tie( im, v ) = create_and_fill( size( 200, 100 ), 128_g8 );
-    bool result = true;
-    for ( uint32_t i=0; i<im.pixel_count(); ++i )
-        result &= (im[i] == v);
+    image im{ 10, 10, pixel_format::GREY_U8 };
+    fill( im, 42.0 );
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        REQUIRE( im.at<g_8>( i ) == g_8( 42 ) );
 
-    REQUIRE( result );
-}
+    // floating point fill truncates through the pixel type
+    image imf{ 4, 4, pixel_format::GREY_F32 };
+    fill( imf, 1.5 );
+    for ( image::index_t i = 0; i < imf.pixel_count(); ++i )
+        REQUIRE( imf.at<g_f32>( i ) == g_f32( 1.5f ) );
 
-TEST_CASE("image_utils_test - generator_fill_test")
-{
-    image_g_8 im{128, 128};
-    fill( im, [](auto, auto y){ return y; } );
-
-    bool result = true;
-    for ( uint32_t h=0; h<im.height(); ++h )
-        for ( uint32_t w=0; w<im.width(); ++w )
-            result &= (im[{w, h}] == h);
-
-    REQUIRE( result );
-}
-
-TEST_CASE("image_utils_test - pnm_load_save_test")
-{
-    std::ifstream is("A_00001_a.tiff", std::ios::binary);
-    REQUIRE(is.is_open());
-
-    std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };
-    REQUIRE(!!loader);
-
-    image_g_16 im;
-    loader->load( is, im );
-    is.close();
-
-    // write data
-    std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
+    // colour images are filled with a "grey" value of the family
+    image rgba{ 4, 4, pixel_format::RGBA_U8 };
+    fill( rgba, 77.0 );
+    for ( image::index_t i = 0; i < rgba.pixel_count(); ++i )
     {
-        std::fstream os( "A_00001_a.image_utils_test.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
-        writer->save( os, im );
-    }
-
-    // re-read data, from PNM
-    is = std::ifstream("A_00001_a.image_utils_test.pgm", std::ios::binary);
-    REQUIRE(is.is_open());
-
-    loader = image_loader_registry::instance().find(is);
-    REQUIRE(!!loader);
-
-    image_g_16 reloaded;
-    loader->load( is, reloaded );
-    is.close();
-
-    {
-        std::ofstream os( "reloaded.image_utils_test.pgm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
-        writer->save( os, reloaded );
-    }
-
-    // and check the two images are equal
-    REQUIRE( im == reloaded );
-}
-
-TEST_CASE("image_utils_test - rgba_split_test")
-{
-    image_rgba_16 im{ 200, 200, rgba_16{100, 200, 300, 400} };
-    auto [ r, g, b, a ] = split_to_channels(im);
-
-    {
-        auto [ min, max ] = find_image_range( r );
-        REQUIRE( min == max );
-        REQUIRE( min == 100 );
-    }
-
-    {
-        auto [ min, max ] = find_image_range( g );
-        REQUIRE( min == max );
-        REQUIRE( min == 200 );
-    }
-
-    {
-        auto [ min, max ] = find_image_range( b );
-        REQUIRE( min == max );
-        REQUIRE( min == 300 );
-    }
-
-    {
-        auto [ min, max ] = find_image_range( a );
-        REQUIRE( min == max );
-        REQUIRE( min == 400 );
+        auto& p = rgba.at<rgba_8>( i );
+        REQUIRE( p.r == 77 );
+        REQUIRE( p.g == 77 );
+        REQUIRE( p.b == 77 );
+        REQUIRE( p.a == 255 );
     }
 }
 
-TEST_CASE("image_utils_test - rgba_join_test")
+TEST_CASE("image_utils_test - fill_generator")
 {
-    std::ifstream is("test-mono.tiff", std::ios::binary);
-    REQUIRE(is.is_open());
+    image im{ 8, 6, pixel_format::GREY_F64 };
+    fill( im, []( uint32_t w, uint32_t h ) { return w + 10.0*h; } );
 
-    std::shared_ptr<image_loader> loader{ image_loader_registry::instance().find(is) };
-    REQUIRE(!!loader);
-
-    image_g_16 im;
-    loader->load( is, im );
-    is.close();
-
-    g_16 min, max;
-    std::tie(min, max) = find_image_range( im );
-    auto scale = (max == min) ? g_16::max() : g_16::max()/(max-min);
-    apply( im, [min, scale](auto, auto v){return scale*(v-min);} );
-    std::cout << "min: " << min << ", max: " << max << ", scale: " << scale << "\n";
-
-    size output_size = im.size() - size(40, 40);
-    auto r = create_image_view( im, rect{ { 0,  0}, output_size } );
-    auto g = create_image_view( im, rect{ {10, 10}, output_size } );
-    auto b = create_image_view( im, rect{ {20, 20}, output_size } );
-    auto a = create_image_view( im, rect{ {30, 30}, output_size } );
-
-    image_rgba_16 rgba = join_from_channels( r, g, b, a);
-
-    std::shared_ptr<image_loader> writer{ image_loader_registry::instance().find("image/x-portable-anymap") };
-    std::fstream os( "test-rgbjoin.ppm", std::ios_base::trunc | std::ios_base::out | std::ios_base::binary );
-    writer->save( os, rgba );
-}
-
-TEST_CASE("image_utils_test - simple_transpose_test")
-{
-    image_g_16 im{ 100, 200 };
-    std::iota( std::begin( im ), std::end( im ), 0 );
-
-    REQUIRE( save_to_file( "transpose_input.pgm", im ) );
-
-    image_g_16 transposed{ transpose( im ) };
-    REQUIRE( save_to_file( "transpose_output.pgm", transposed ) );
-
-    REQUIRE( transposed.width()  == im.height() );
-    REQUIRE( transposed.height() == im.width() );
-
-    for ( auto h : range_start_at(0).length(transposed.height()) )
-        REQUIRE( *transposed.line(h) == h );
-}
-
-TEST_CASE("image_utils_test - identity_transpose_test")
-{
-    image_g_16 im{ 100, 200 };
-    std::iota( std::begin( im ), std::end( im ), 0 );
-
-    image_g_16 transposed{ transpose( im ) };
-    image_g_16 identity{ transpose( transposed ) };
-
-    auto i = std::cbegin(im);
-    auto e = std::cend(im);
-    auto id = std::cbegin(identity);
-    while ( i!=e )
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
     {
-        REQUIRE( *i == *id );
-        ++i; ++id;
+        const uint32_t w = static_cast<uint32_t>( i ) % im.width();
+        const uint32_t h = static_cast<uint32_t>( i ) / im.width();
+        REQUIRE( im.at<g_f>( i ) == g_f( w + 10.0*h ) );
     }
+
+    // generator fill on a sub-image
+    image sub = im.sub_image( rect{ { 2, 2 }, size{ 4, 2 } } );
+    fill( sub, []( uint32_t, uint32_t ){ return -1.0; } );
+    for ( image::index_t i = 0; i < sub.pixel_count(); ++i )
+        REQUIRE( sub.at<g_f>( i ) == g_f( -1.0 ) );
 }
 
-TEST_CASE("image_utils_test - complex_transpose_test")
+TEST_CASE("image_utils_test - apply")
 {
-    image_c_f im{ 100, 200 };
-    std::generate( std::begin( im ), std::end( im ),
-                   [i=0]() mutable {
-                       return c_f{ i, i };
-                   } );
+    image im{ 4, 4, pixel_format::GREY_U8 };
 
+    // apply must be generic over pixel types; the lambda compiles
+    // for every format the image could be
+    apply( im, []( image::index_t i, auto& v ){
+            using P = std::decay_t<decltype(v)>;
+            using V = typename P::value_t;
+            return P( static_cast<V>( i ) );
+        } );
 
-    image_c_f transposed{ transpose( im ) };
+    // check result through the grey accessor
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        REQUIRE( im.at<g_8>( i ) == g_8( static_cast<uint8_t>( i ) ) );
+}
 
-    auto i = std::cbegin(im);
-    auto e = std::cend(im);
-    auto id = std::cbegin(transposed);
-    while ( i!=e )
+TEST_CASE("image_utils_test - apply_two_images")
+{
+    // out-of-place: dst = a * b
+    image a{ 4, 4, pixel_format::COMPLEX_F64 };
+    image b{ 4, 4, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < a.pixel_count(); ++i )
     {
-        REQUIRE( *i == *id );
-        ++i; ++id;
+        a.at<c_f>( i ) = c_f( static_cast<double>( i ), static_cast<double>( 1 + i ) );
+        b.at<c_f>( i ) = c_f( static_cast<double>( 2 ), static_cast<double>( 3 - i ) );
     }
-}
 
-TEST_CASE("image_utils_test - swap_quadrants_test")
-{
-    image_g_f im{ 100, 100 };
+    image dst{ a.size(), pixel_format::COMPLEX_F64 };
+    apply<c_f>( a, b, dst, []( const c_f& x, const c_f& y ) { return x * y; } );
+    for ( image::index_t i = 0; i < dst.pixel_count(); ++i )
+        REQUIRE( dst.at<c_f>( i ) == a.at<c_f>( i ) * b.at<c_f>( i ) );
 
-    apply(
-        im,
-        [w=im.width(), h=im.height()]( auto i, auto )
+    // in-place: dst may alias one of the sources, and the op may
+    // use family-specific pixel members (complex conjugation here)
+    image inplace{ a.detach() };
+    apply<c_f>( b, inplace, inplace, []( const c_f& x, const c_f& y )
         {
-            g_f x = ( i % w ) < w/2 ? 1 : 2;
-            g_f y = ( i / w ) < h/2 ? 1 : 4;
+            return x * y.conj();
+        } );
+    for ( image::index_t i = 0; i < inplace.pixel_count(); ++i )
+        REQUIRE( inplace.at<c_f>( i ) == b.at<c_f>( i ) * a.at<c_f>( i ).conj() );
 
-            return x*y;
-        }
-        );
+    // grey pixels are equally supported, and sources may be
+    // sub-images (pitch-aware strides)
+    image parent{ 8, 8, pixel_format::GREY_U16 };
+    fill( parent, []( uint32_t w, uint32_t h ) { return w + 10*h; } );
+    image lhs{ parent.sub_image( rect{ { 1, 1 }, size{ 4, 4 } } ) };
+    image rhs{ parent.sub_image( rect{ { 3, 2 }, size{ 4, 4 } } ) };
+    image grey_dst{ size{ 4, 4 }, pixel_format::GREY_U16 };
+    apply<g_16>( lhs, rhs, grey_dst, []( const g_16& x, const g_16& y ) { return x + y; } );
+    for ( uint32_t h = 0; h < 4; ++h )
+        for ( uint32_t w = 0; w < 4; ++w )
+            REQUIRE( grey_dst.at<g_16>( point2<uint32_t>( w, h ) ) ==
+                     lhs.at<g_16>( point2<uint32_t>( w, h ) ) +
+                     rhs.at<g_16>( point2<uint32_t>( w, h ) ) );
 
-    REQUIRE( save_to_file( "swap_quadrants_input.pgm", im ) );
+    // mismatched dimensions and formats are errors
+    image bad_size{ size{ 4, 8 }, pixel_format::COMPLEX_F64 };
+    REQUIRE_THROWS_AS( apply<c_f>( a, b, bad_size,
+                                   []( const c_f& x, const c_f& ) { return x; } ),
+                       std::runtime_error );
 
-    size s{ im.width()/2, im.height()/2 };
-    auto q1 = create_image_view( im, { {0, 0}, s } );
-    auto q2 = create_image_view( im, { {50, 0}, s } );
-    auto q3 = create_image_view( im, { {0, 50}, s } );
-    auto q4 = create_image_view( im, { {50, 50}, s } );
+    image grey_src{ a.size(), pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( apply<c_f>( a, grey_src, dst,
+                                   []( const c_f& x, const c_f& ) { return x; } ),
+                       std::runtime_error );
+}
 
-    REQUIRE( pixel_sum( q1 ) == 1 * q1.pixel_count() );
-    REQUIRE( pixel_sum( q2 ) == 2 * q2.pixel_count() );
-    REQUIRE( pixel_sum( q3 ) == 4 * q3.pixel_count() );
-    REQUIRE( pixel_sum( q4 ) == 8 * q4.pixel_count() );
+TEST_CASE("image_utils_test - pixel_sum")
+{
+    image im{ 10, 10, pixel_format::GREY_U8 };
+    fill( im, []( uint32_t w, uint32_t h ) { return w + h; } );
+    // trivially: sum_{0..9}(w+h) per row = 45*rows + 10*sum(h)
+    REQUIRE( pixel_sum( im ) == 45*10 + 10*45 );
 
+    image imf{ 4, 4, pixel_format::GREY_F64 };
+    fill( imf, 0.5 );
+    REQUIRE( doctest::matchers::WithinAbs( pixel_sum( imf ), 8.0, 1e-12 ) );
+
+    // non-grey images are rejected
+    REQUIRE_THROWS_AS( pixel_sum( image{ 4, 4, pixel_format::RGBA_U8 } ), std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - transpose")
+{
+    image im{ 7, 3, pixel_format::GREY_U8 };
+    fill( im, []( uint32_t w, uint32_t h ) { return w * 100 + h; } );
+
+    image t{ transpose( im ) };
+    REQUIRE( t.width() == 3 );
+    REQUIRE( t.height() == 7 );
+    REQUIRE( t.format() == im.format() );
+
+    for ( image::index_t i = 0; i < t.pixel_count(); ++i )
+    {
+        const uint32_t w = static_cast<uint32_t>( i ) % t.width();
+        const uint32_t h = static_cast<uint32_t>( i ) / t.width();
+        REQUIRE( t.at<g_8>( i ) == im.at<g_8>( point2<uint32_t>( h, w ) ) );
+    }
+
+    // two-stage transpose into a provided output
+    image out{ 3, 7, pixel_format::GREY_U8 };
+    copy_transpose( im, out );
+    REQUIRE( out == t );
+
+    // mismatched formats/dimensions are errors
+    image wrong_format{ 7, 3, pixel_format::GREY_U16 };
+    image wrong_dims{ 7, 3, pixel_format::GREY_U8 };
+    REQUIRE_THROWS_AS( copy_transpose( im, wrong_format ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_transpose( im, wrong_dims ), std::runtime_error );
+
+    // transpose of a sub-image
+    image sub = im.sub_image( rect{ { 2, 1 }, size{ 3, 2 } } );
+    image strt{ transpose( sub ) };
+    REQUIRE( strt.width() == 2 );
+    REQUIRE( strt.height() == 3 );
+    for ( image::index_t i = 0; i < strt.pixel_count(); ++i )
+    {
+        const uint32_t w = static_cast<uint32_t>( i ) % strt.width();
+        const uint32_t h = static_cast<uint32_t>( i ) / strt.width();
+        REQUIRE( strt.at<g_8>( i ) == sub.at<g_8>( point2<uint32_t>( h, w ) ) );
+    }
+}
+
+TEST_CASE("image_utils_test - swap_quadrants")
+{
+    image im{ 8, 8, pixel_format::GREY_U8 };
+    fill( im, []( uint32_t, uint32_t h ) { return h; } );
+
+    // fill each quadrant with a distinct value
+    auto value_at = []( uint32_t w, uint32_t h, uint32_t dim )
+        {
+            const bool left{ w < dim/2 };
+            const bool bottom{ h < dim/2 };
+            return left ? ( bottom ? 1 : 2 ) : ( bottom ? 3 : 4 );
+        };
+    fill( im, [&value_at]( uint32_t w, uint32_t h ) { return value_at( w, h, 8 ); } );
+
+    image original{ im.detach() };
     swap_quadrants( im );
 
-    REQUIRE( save_to_file( "swap_quadrants_output.pgm", im ) );
-
-    REQUIRE( pixel_sum( q1 ) == 8 * q1.pixel_count() );
-    REQUIRE( pixel_sum( q2 ) == 4 * q2.pixel_count() );
-    REQUIRE( pixel_sum( q3 ) == 2 * q3.pixel_count() );
-    REQUIRE( pixel_sum( q4 ) == 1 * q4.pixel_count() );
-}
-
-TEST_CASE("image_utils_test - peak_find_test")
-{
-    image_g_f im{ 100, 100 };
-
-    // add some peaks
-    im[ {20, 20} ] = 20.0;
-    im[ {30, 30} ] = 30.0;
-    im[ {40, 40} ] = 40.0;
-    im[ {50, 50} ] = 50.0;
-
-    // find the peaks - in order
-    auto peaks{ find_peaks( im, 3, 1 ) };
-    REQUIRE( peaks.size() == 3 );
-    CHECK( peaks[0].rect().midpoint() == rect::point_t( 50, 50 ) );
-    CHECK( peaks[1].rect().midpoint() == rect::point_t( 40, 40 ) );
-    CHECK( peaks[2].rect().midpoint() == rect::point_t( 30, 30 ) );
-    CHECK( peaks[0].rect().size() == size( 3, 3 ) );
-
-    CHECK( peaks[0][ {1, 1} ] == 50.0 );
-    CHECK( peaks[1][ {1, 1} ] == 40.0 );
-    CHECK( peaks[2][ {1, 1} ] == 30.0 );
-}
-
-TEST_CASE("image_utils_test - peak_find_test_with_offset")
-{
-    auto sink_id = logger::Logger::instance().add_sink(
-        [](logger::Level, const std::string& m) -> bool
-            {
-                std::cout << m << "\n";
-                return true;
-            });
-
-    rect::point_t o{ 10, 10 };
-    size s{ 100, 100 };
-    const auto [ox, oy] = o.data();
-    image_g_f im{ rect( o, s ) };
-    REQUIRE(im.rect() == rect( o, s ));
-
-    // add some peaks
-    im[ {20, 20} ] = 20.0;
-    im[ {30, 30} ] = 30.0;
-    im[ {40, 40} ] = 40.0;
-    im[ {50, 50} ] = 50.0;
-
-    // find the peaks - in order
-    auto peaks{ find_peaks( im, 3, 1 ) };
-    logger::sync_debug("image: {}", im);
-    logger::sync_debug("peaks: {}", peaks);
-    REQUIRE( peaks.size() == 3 );
-    CHECK( peaks[0].rect().midpoint() == rect::point_t( ox + 50, oy + 50 ) );
-    CHECK( peaks[1].rect().midpoint() == rect::point_t( ox + 40, oy + 40 ) );
-    CHECK( peaks[2].rect().midpoint() == rect::point_t( ox + 30, oy + 30 ) );
-    CHECK( peaks[0].rect().size() == size( 3, 3 ) );
-
-    CHECK( peaks[0][ {1, 1} ] == 50.0 );
-    CHECK( peaks[1][ {1, 1} ] == 40.0 );
-    CHECK( peaks[2][ {1, 1} ] == 30.0 );
-
-    logger::Logger::instance().remove_sink(sink_id);
-}
-
-TEST_CASE("image_utils_test - peak_find_test - empty")
-{
-    image_g_f im{ 100, 100 };
-
-    // find the peaks - in order
-    auto peaks{ find_peaks( im, 3, 1 ) };
-    REQUIRE( peaks.size() == 0 );
-}
-
-TEST_CASE("image_utils_test - extract_test")
-{
-    image_g_f im{ 100, 100 };
-
-    // fill quadrants with values of 1, 2, 4, 8
-    apply(
-        im,
-        [w=im.width(), h=im.height()]( auto i, auto )
+    // after swapping: q1 <-> q3, q2 <-> q4 (using (0,0) as the
+    // bottom-left corner)
+    for ( uint32_t h = 0; h < 8; ++h )
+        for ( uint32_t w = 0; w < 8; ++w )
         {
-            g_f x = ( i % w ) < w/2 ? 1 : 2;
-            g_f y = ( i / w ) < h/2 ? 1 : 4;
-
-            return x*y;
+            REQUIRE( im.at<g_8>( point2<uint32_t>( w, h ) ) ==
+                     original.at<g_8>( point2<uint32_t>( (w + 4) % 8, (h + 4) % 8 ) ) );
         }
-        );
 
-    size s{ im.width()/2, im.height()/2 };
-    image_g_f q1 = extract(im, { {0, 0}, s });
-    image_g_f q2 = extract(im, { {50, 0}, s });
-    image_g_f q3 = extract(im, { {0, 50}, s });
-    image_g_f q4 = extract(im, { {50, 50}, s });
-
-    // check we've extracted only the part of the
-    // original we wanted
-    REQUIRE( q1.rect().bottomLeft() == rect::point_t{ 0, 0 } );
-    REQUIRE( q2.rect().bottomLeft() == rect::point_t{ 50, 0 } );
-    REQUIRE( q3.rect().bottomLeft() == rect::point_t{ 0, 50 } );
-    REQUIRE( q4.rect().bottomLeft() == rect::point_t{ 50, 50 } );
-
-    REQUIRE( pixel_sum( q1 ) == 1 * q1.pixel_count() );
-    REQUIRE( pixel_sum( q2 ) == 2 * q2.pixel_count() );
-    REQUIRE( pixel_sum( q3 ) == 4 * q3.pixel_count() );
-    REQUIRE( pixel_sum( q4 ) == 8 * q4.pixel_count() );
-
+    // double swap is identity
     swap_quadrants( im );
+    REQUIRE( im == original );
 
-    // check extracted images are truly independent
-    // of original image
-    REQUIRE( pixel_sum( q1 ) == 1 * q1.pixel_count() );
-    REQUIRE( pixel_sum( q2 ) == 2 * q2.pixel_count() );
-    REQUIRE( pixel_sum( q3 ) == 4 * q3.pixel_count() );
-    REQUIRE( pixel_sum( q4 ) == 8 * q4.pixel_count() );
+    // odd dimensions are rejected
+    image odd{ 3, 3, pixel_format::GREY_U8 };
+    REQUIRE_THROWS_AS( swap_quadrants( odd ), std::runtime_error );
 }
 
-
-TEST_CASE("image_utils_test - extract_image_view_test")
+TEST_CASE("image_utils_test - find_peaks")
 {
-    image_g_f im{ 100, 100 };
+    image im{ 32, 32, pixel_format::GREY_F64 };
+    fill( im, 0.0 );
 
-    // fill central 25% with 1 else 0
-    apply(
-        im,
-        [w=im.width(), h=im.height()]( auto i, auto )
-        {
-            auto x = ( i % w );
-            auto y = ( i / w );
+    // craft a couple of peaks
+    const point2<uint32_t> peak_a{ 5, 10 };
+    const point2<uint32_t> peak_b{ 20, 25 };
+    im.at<g_f>( peak_a ) = g_f( 10.0 );
+    im.at<g_f>( peak_b ) = g_f( 100.0 );
 
-            if ( x >= w/4 && x < 3*w/4 &&
-                 y >= h/4 && y < 3*h/4 )
-                return 1;
+    auto peaks = find_peaks( im, 5, 1 );
+    REQUIRE( peaks.size() == 2 );
 
-            return 0;
-        }
-        );
+    // peaks are sorted by value, and share the source data
+    REQUIRE( peaks[0].rect().bottomLeft() == rect::point_t( 19, 24 ) );
+    REQUIRE( peaks[1].rect().bottomLeft() == rect::point_t( 4, 9 ) );
 
-    size s{ im.width()/2, im.height()/2 };
-    image_g_f c1 = extract(im, { {25, 25}, s });
-    image_g_f c2 = extract(
-        create_image_view(im, im.rect().dilate(0.5)),
-        { {}, s }
-        );
+    im.at<g_f>( peak_b ) = g_f( 0.0 );
+    REQUIRE( peaks[0].at<g_f>( point2<uint32_t>( 1, 1 ) ) == g_f( 0.0 ) );
 
-    // check we've extracted only the part of the
-    // original we wanted
-    REQUIRE( pixel_sum( c1 ) == 1 * c1.pixel_count() );
-    REQUIRE( pixel_sum( c2 ) == 1 * c2.pixel_count() );
+    // num_peaks caps the result
+    im.at<g_f>( peak_b ) = g_f( 100.0 );
+    auto peaks_capped = find_peaks( im, 1, 1 );
+    REQUIRE( peaks_capped.size() == 1 );
+    REQUIRE( peaks_capped[0].rect().bottomLeft() == rect::point_t( 19, 24 ) );
+
+    // non-grey images are rejected
+    REQUIRE_THROWS_AS( find_peaks( image{ 32, 32, pixel_format::RGBA_U8 }, 2, 1 ),
+                       std::runtime_error );
+    // too small images are rejected
+    REQUIRE_THROWS_AS( find_peaks( image{ 3, 3, pixel_format::GREY_U8 }, 2, 2 ),
+                       std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - fit_simple_gaussian")
+{
+    // a gaussian-like peak with centre at (1, 1); the fit should
+    // recover the (sub-pixel) centre
+    image im{ 3, 3, pixel_format::GREY_F64 };
+    const double values[] = { 0.5, 0.75, 0.5,
+                              0.75, 1.0, 0.75,
+                              0.5, 0.75, 0.5 };
+    for ( uint32_t h = 0; h < 3; ++h )
+        for ( uint32_t w = 0; w < 3; ++w )
+            im.at<g_f>( point2<uint32_t>( w, h ) ) = g_f( values[ h*3 + w ] );
+
+    const auto result = fit_simple_gaussian( im );
+    // symmetric peak: centre is unchanged
+    REQUIRE( doctest::matchers::WithinAbs( result[0], 1.0, 1e-9 ) );
+    REQUIRE( doctest::matchers::WithinAbs( result[1], 1.0, 1e-9 ) );
+
+    // an asymmetric peak shifts the centre
+    image im2{ 3, 3, pixel_format::GREY_F64 };
+    const double values2[] = { 0.25, 0.5, 0.75,
+                               0.5, 0.75, 1.0,
+                               0.25, 0.5, 0.75 };
+    for ( uint32_t h = 0; h < 3; ++h )
+        for ( uint32_t w = 0; w < 3; ++w )
+            im2.at<g_f>( point2<uint32_t>( w, h ) ) = g_f( values2[ h*3 + w ] );
+
+    const auto result2 = fit_simple_gaussian( im2 );
+    REQUIRE( result2[0] > 1.0 );
+    REQUIRE( doctest::matchers::WithinAbs( result2[1], 1.0, 1e-9 ) );
+
+    REQUIRE_THROWS_AS( fit_simple_gaussian( image{ 4, 4, pixel_format::GREY_F64 } ),
+                       std::runtime_error );
+    REQUIRE_THROWS_AS( fit_simple_gaussian( image{ 3, 3, pixel_format::RGBA_U8 } ),
+                       std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - split_join_channels")
+{
+    image im{ 8, 6, pixel_format::RGBA_U16 };
+    fill( im, []( uint32_t w, uint32_t h ) { return w + h; } );
+
+    auto [r, g, b, a] = split_to_channels( im );
+    REQUIRE( r.format() == pixel_format::GREY_U16 );
+    REQUIRE( r.width() == 8 );
+    REQUIRE( r.height() == 6 );
+    for ( image::index_t i = 0; i < r.pixel_count(); ++i )
+    {
+        const auto& p = im.at<rgba_16>( i );
+        REQUIRE( r.at<g_16>( i ) == g_16( p.r ) );
+        REQUIRE( g.at<g_16>( i ) == g_16( p.g ) );
+        REQUIRE( b.at<g_16>( i ) == g_16( p.b ) );
+        REQUIRE( a.at<g_16>( i ) == g_16( p.a ) );
+    }
+
+    // joins round-trip
+    image joined = join_from_channels( r, g, b, a );
+    REQUIRE( joined.format() == pixel_format::RGBA_U16 );
+    REQUIRE( joined == im );
+
+    // mismatches are errors
+    REQUIRE_THROWS_AS( join_from_channels( r, g, b, image{ 8, 6, pixel_format::GREY_U8 } ),
+                       std::runtime_error );
+    REQUIRE_THROWS_AS( join_from_channels( r, g, b, image{ 6, 8, pixel_format::GREY_U16 } ),
+                       std::runtime_error );
+    REQUIRE_THROWS_AS( split_to_channels( image{ 4, 4, pixel_format::GREY_U8 } ),
+                       std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - split_join_complex_channels")
+{
+    image im{ 8, 6, pixel_format::COMPLEX_F32 };
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        im.at<c_f32>( i ) = c_f32( static_cast<float>( i ), static_cast<float>( -i ) );
+
+    auto [r, i] = split_complex_to_channels( im );
+    REQUIRE( r.format() == pixel_format::GREY_F32 );
+    for ( image::index_t j = 0; j < r.pixel_count(); ++j )
+    {
+        REQUIRE( r.at<g_f32>( j ) == g_f32( static_cast<float>( j ) ) );
+        REQUIRE( i.at<g_f32>( j ) == g_f32( static_cast<float>( -j ) ) );
+    }
+
+    image joined = join_complex_from_channels( r, i );
+    REQUIRE( joined.format() == pixel_format::COMPLEX_F32 );
+    REQUIRE( joined == im );
+}
+
+TEST_CASE("image_utils_test - real")
+{
+    image im{ 4, 4, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        im.at<c_f>( i ) = c_f( static_cast<double>( i*2 ), static_cast<double>( 5 - i ) );
+
+    image re{ real( im ) };
+    REQUIRE( re.format() == pixel_format::GREY_F64 );
+    for ( image::index_t i = 0; i < re.pixel_count(); ++i )
+        REQUIRE( re.at<g_f>( i ) == g_f( static_cast<double>( i*2 ) ) );
+
+    // out-parameter form: extraction into any grey depth, with truncation
+    image out_u8{ im.size(), pixel_format::GREY_U8 };
+    copy_real( im, out_u8 );
+    REQUIRE( out_u8.format() == pixel_format::GREY_U8 );
+    for ( image::index_t i = 0; i < out_u8.pixel_count(); ++i )
+        REQUIRE( out_u8.at<g_8>( i ) == g_8( static_cast<uint8_t>( i*2 ) ) );
+
+    // out-parameter form matches the by-value form at equal depth
+    image out_f64{ im.size(), pixel_format::GREY_F64 };
+    copy_real( im, out_f64 );
+    REQUIRE( out_f64 == re );
+
+    // checks
+    image non_complex{ 4, 4, pixel_format::GREY_U8 };
+    image grey_out{ 4, 8, pixel_format::GREY_U8 };
+    image rgba_out{ 4, 4, pixel_format::RGBA_U8 };
+    REQUIRE_THROWS_AS( real( non_complex ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( non_complex, grey_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( im, rgba_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real( im, grey_out ), std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - copy_real_swap_quadrants")
+{
+    // 6x8 complex source; the real part carries a unique value per
+    // pixel and the imaginary part is non-zero, so any leakage of
+    // imaginary data is caught
+    image im{ 6, 8, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < im.pixel_count(); ++i )
+        im.at<c_f>( i ) = c_f( static_cast<double>( i ), static_cast<double>( 7 - i ) );
+
+    image fused{ im.size(), pixel_format::GREY_F64 };
+    copy_real_swap_quadrants( im, fused );
+
+    // equivalence with the two-pass composition
+    image twopass{ im.size(), pixel_format::GREY_F64 };
+    copy_real( im, twopass );
+    swap_quadrants( twopass );
+    REQUIRE( fused == twopass );
+
+    // explicit mapping: the value at source (w, h) lands at
+    // ((w+half_w) % width, (h+half_h) % height)
+    for ( uint32_t h = 0; h < im.height(); ++h )
+        for ( uint32_t w = 0; w < im.width(); ++w )
+            REQUIRE( fused.at<g_f>( point2<uint32_t>( ( w + 3 ) % 6, ( h + 4 ) % 8 ) ) ==
+                     g_f( im.at<c_f>( point2<uint32_t>( w, h ) ).real ) );
+
+    // depth conversion of the destination
+    image out_u8{ im.size(), pixel_format::GREY_U8 };
+    copy_real_swap_quadrants( im, out_u8 );
+    for ( uint32_t h = 0; h < im.height(); ++h )
+        for ( uint32_t w = 0; w < im.width(); ++w )
+            REQUIRE( out_u8.at<g_8>( point2<uint32_t>( ( w + 3 ) % 6, ( h + 4 ) % 8 ) ) ==
+                     g_8( static_cast<uint8_t>( im.at<c_f>( point2<uint32_t>( w, h ) ).real ) ) );
+
+    // sub-image sources (pitch-aware strides)
+    image parent{ 8, 8, pixel_format::COMPLEX_F64 };
+    for ( image::index_t i = 0; i < parent.pixel_count(); ++i )
+        parent.at<c_f>( i ) = c_f( static_cast<double>( 64 - i ), static_cast<double>( i ) );
+    image sub{ parent.sub_image( rect{ { 2, 1 }, size{ 6, 6 } } ) };
+    image sub_fused{ size{ 6, 6 }, pixel_format::GREY_F64 };
+    copy_real_swap_quadrants( sub, sub_fused );
+    image sub_twopass{ size{ 6, 6 }, pixel_format::GREY_F64 };
+    copy_real( sub, sub_twopass );
+    swap_quadrants( sub_twopass );
+    REQUIRE( sub_fused == sub_twopass );
+
+    // checks: complex source, grey destination, matching
+    // even-dimensioned sizes
+    image grey_src{ 6, 8, pixel_format::GREY_F64 };
+    image grey_dst{ 6, 8, pixel_format::GREY_F64 };
+    image rgba_dst{ 6, 8, pixel_format::RGBA_U8 };
+    image odd{ 4, 3, pixel_format::COMPLEX_F64 };
+    image odd_out{ 4, 3, pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( odd, odd_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( im, odd_out ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( grey_src, grey_dst ), std::runtime_error );
+    REQUIRE_THROWS_AS( copy_real_swap_quadrants( im, rgba_dst ), std::runtime_error );
+}
+
+TEST_CASE("image_utils_test - convert")
+{
+    // by-value form: a new image of the same size with the requested format
+    image grey{ 8, 4, pixel_format::GREY_U8 };
+    fill( grey, []( uint32_t w, uint32_t h ) { return (w + 10*h) % 251; } );
+
+    image wide = convert( grey, pixel_format::GREY_F64 );
+    REQUIRE( wide.format() == pixel_format::GREY_F64 );
+    REQUIRE( wide.size() == grey.size() );
+    for ( image::index_t i = 0; i < wide.pixel_count(); ++i )
+        REQUIRE( doctest::matchers::WithinAbs( wide.at<g_f>( i ), grey.at<g_8>( i ), 1e-12 ) );
+
+    // out-parameter form: the destination carries the requested format
+    image dst{ grey.size(), pixel_format::GREY_F32 };
+    copy_convert( grey, dst );
+    for ( image::index_t i = 0; i < dst.pixel_count(); ++i )
+        REQUIRE( dst.at<g_f32>( i ) == g_f32( grey.at<g_8>( i ) ) );
+
+    // same-format copy_convert is a straight copy (sub-image sources
+    // are honoured; the destination keeps its own rect and pitch, so
+    // compare content rather than geometry)
+    image sub = grey.sub_image( core::rect{ { 2, 1 }, core::size{ 4, 2 } } );
+    image sub_copy{ sub.size(), pixel_format::GREY_U8 };
+    copy_convert( sub, sub_copy );
+    bool matched{ true };
+    for ( image::index_t i = 0; i < sub.pixel_count(); ++i )
+        if ( sub.at<g_8>( i ) != sub_copy.at<g_8>( i ) )
+            matched = false;
+    CHECK( matched );
+
+    // round trip through two depths
+    image back = convert( convert( grey, pixel_format::GREY_F64 ), pixel_format::GREY_U8 );
+    REQUIRE( back == grey );
+
+    // same format with the by-value form is a positioned deep copy
+    image same = convert( grey, pixel_format::GREY_U8 );
+    REQUIRE( same == grey );
+    REQUIRE( same.rect() == grey.rect() );
+
+    // checks: the destination's format is the requested format, so
+    // only dimension and convertibility remain to validate
+    image bad_size{ core::size{ 4, 4 }, pixel_format::GREY_F64 };
+    REQUIRE_THROWS_AS( copy_convert( grey, bad_size ), std::runtime_error );
+    // unsupported pixel pair: complex -> rgb has no conversion
+    image cmplx{ 8, 4, pixel_format::COMPLEX_F64 };
+    image rgb_dst{ core::size{ 8, 4 }, pixel_format::RGB_U8 };
+    REQUIRE_THROWS_AS( copy_convert( cmplx, rgb_dst ), std::runtime_error );
+    REQUIRE_THROWS_AS( convert( grey, pixel_format::UNKNOWN ), std::invalid_argument );
 }

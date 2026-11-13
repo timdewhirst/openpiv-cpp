@@ -35,6 +35,12 @@ struct rgba
 
     rgba& operator=(const rgba&) = default;
     rgba& operator=(rgba&&) = default;
+    template < typename U >
+    rgba& operator=( const rgba<U>& rhs )
+    {
+        r = rhs.r; g = rhs.g; b = rhs.b; a = rhs.a;
+        return *this;
+    }
     rgba& operator=( T v )
     {
         rgba tmp{ v };
@@ -60,11 +66,67 @@ struct rgba
 using rgba_8  = rgba<uint8_t>;
 using rgba_16 = rgba<uint16_t>;
 using rgba_32 = rgba<uint32_t>;
+using rgba_f32 = rgba<float>;
+using rgba_f  = rgba<double>;
 
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const rgba<T>& rgba )
 {
     os << "rgba(" << +rgba.r << ", " << +rgba.g << ", " << +rgba.b << ", " << +rgba.a << ")";
+    return os;
+}
+
+/// rgb packed
+template < typename T >
+struct rgb
+{
+    using value_t = T;
+
+    rgb() = default;
+    rgb(const rgb&) = default;
+    rgb(rgb&&) = default;
+    rgb( T v ) : r(v), g(v), b(v) {}
+    rgb( T r_, T g_, T b_ ) : r(r_), g(g_), b(b_) {}
+
+    rgb& operator=(const rgb&) = default;
+    rgb& operator=(rgb&&) = default;
+    template < typename U >
+    rgb& operator=( const rgb<U>& rhs )
+    {
+        r = rhs.r; g = rhs.g; b = rhs.b;
+        return *this;
+    }
+    rgb& operator=( T v )
+    {
+        rgb tmp{ v };
+        std::swap( *this, tmp );
+        return *this;
+    }
+
+    inline bool operator==( const rgb& rhs ) const
+    {
+        return std::memcmp(this, &rhs, sizeof(rgb)) == 0;
+    }
+    inline bool operator!=( const rgb& rhs ) const
+    {
+        return !operator==(rhs);
+    }
+
+    T r{};
+    T g{};
+    T b{};
+};
+
+using rgb_8  = rgb<uint8_t>;
+using rgb_16 = rgb<uint16_t>;
+using rgb_32 = rgb<uint32_t>;
+using rgb_f32 = rgb<float>;
+using rgb_f  = rgb<double>;
+
+template < typename T >
+std::ostream& operator<<(std::ostream& os, const rgb<T>& v )
+{
+    os << "rgb(" << +v.r << ", " << +v.g << ", " << +v.b << ")";
     return os;
 }
 
@@ -82,6 +144,12 @@ struct yuva
 
     yuva& operator=(const yuva&) = default;
     yuva& operator=(yuva&&) = default;
+    template < typename U >
+    yuva& operator=( const yuva<U>& rhs )
+    {
+        y = rhs.y; u = rhs.u; v = rhs.v; a = rhs.a;
+        return *this;
+    }
     yuva& operator=( T v )
     {
         yuva tmp{ v };
@@ -107,11 +175,67 @@ struct yuva
 using yuva_8  = yuva<uint8_t>;
 using yuva_16 = yuva<uint16_t>;
 using yuva_32 = yuva<uint32_t>;
+using yuva_f32 = yuva<float>;
+using yuva_f  = yuva<double>;
 
 template < typename T >
 std::ostream& operator<<(std::ostream& os, const yuva<T>& v )
 {
     os << "yuva(" << +v.y << ", " << +v.u << ", " << +v.v << ", " << +v.a << ")";
+    return os;
+}
+
+/// yuv packed
+template < typename T >
+struct yuv
+{
+    using value_t = T;
+
+    yuv() = default;
+    yuv(const yuv&) = default;
+    yuv(yuv&&) = default;
+    yuv( T v ) : y(v), u(0), v(0) {}
+    yuv( T y_, T u_, T v_ ) : y(y_), u(u_), v(v_) {}
+
+    yuv& operator=(const yuv&) = default;
+    yuv& operator=(yuv&&) = default;
+    template < typename U >
+    yuv& operator=( const yuv<U>& rhs )
+    {
+        y = rhs.y; u = rhs.u; v = rhs.v;
+        return *this;
+    }
+    yuv& operator=( T v_ )
+    {
+        yuv tmp{ v_ };
+        std::swap( *this, tmp );
+        return *this;
+    }
+
+    inline bool operator==( const yuv& rhs ) const
+    {
+        return std::memcmp(this, &rhs, sizeof(yuv)) == 0;
+    }
+    inline bool operator!=( const yuv& rhs ) const
+    {
+        return !operator==(rhs);
+    }
+
+    T y{};
+    T u{};
+    T v{};
+};
+
+using yuv_8  = yuv<uint8_t>;
+using yuv_16 = yuv<uint16_t>;
+using yuv_32 = yuv<uint32_t>;
+using yuv_f32 = yuv<float>;
+using yuv_f  = yuv<double>;
+
+template < typename T >
+std::ostream& operator<<(std::ostream& os, const yuv<T>& v )
+{
+    os << "yuv(" << +v.y << ", " << +v.u << ", " << +v.v << ")";
     return os;
 }
 
@@ -253,6 +377,7 @@ inline constexpr complex<T> exp( const complex<T>& c )
 using c_8  = complex<int8_t>;
 using c_16 = complex<int16_t>;
 using c_32 = complex<int32_t>;
+using c_f32 = complex<float>;
 using c_f  = complex<double>;
 
 template < typename T >
@@ -294,6 +419,7 @@ struct g
 using g_8  = g<uint8_t>;
 using g_16 = g<uint16_t>;
 using g_32 = g<uint32_t>;
+using g_f32 = g<float>;
 using g_f  = g<double>;
 
 inline g_8  operator ""_g8 ( unsigned long long v ) { return g_8( v ); }
@@ -321,7 +447,13 @@ template <typename T>
 struct is_pixeltype<rgba<T>> : std::true_type {};
 
 template <typename T>
+struct is_pixeltype<rgb<T>> : std::true_type {};
+
+template <typename T>
 struct is_pixeltype<yuva<T>> : std::true_type {};
+
+template <typename T>
+struct is_pixeltype<yuv<T>> : std::true_type {};
 
 template <typename T>
 struct is_pixeltype<complex<T>> : std::true_type {};
@@ -432,7 +564,77 @@ typename
 std::enable_if_t< std::is_convertible_v<From, To> >
 convert( const g<From>& g, rgba<To>& rgba_ )
 {
-    rgba_ = rgba<To>{ g };
+    rgba_ = rgba<To>( static_cast<To>( g ) );
+}
+
+/// convert from rgb to greyscale
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t<
+    std::is_convertible_v<From, To> &&
+    std::is_integral_v<From> &&
+    sizeof(From)<64 >
+convert( const rgb<From>& rgb_, g<To>& g_ )
+{
+    g_ = (rgb_.r*218ULL + rgb_.g*732ULL + rgb_.b*74ULL) >> 10;
+}
+
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t<
+    std::is_convertible_v<From, To> &&
+    std::is_floating_point_v<From> >
+convert( const rgb<From>& rgb_, g<To>& g_ )
+{
+    g_ = 0.2126*rgb_.r + 0.7152*rgb_.g + 0.0722*rgb_.b;
+}
+
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t< std::is_convertible_v<From, To> >
+convert( const g<From>& g_, rgb<To>& rgb_ )
+{
+    rgb_ = rgb<To>( static_cast<To>( g_ ) );
+}
+
+/// convert from yuv to greyscale; luminance is carried by y
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t< std::is_convertible_v<From, To> >
+convert( const yuv<From>& yuv_, g<To>& g_ )
+{
+    g_ = yuv_.y;
+}
+
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t< std::is_convertible_v<From, To> >
+convert( const yuva<From>& yuva_, g<To>& g_ )
+{
+    g_ = yuva_.y;
+}
+
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t< std::is_convertible_v<From, To> >
+convert( const g<From>& g_, yuv<To>& yuv_ )
+{
+    yuv_ = yuv<To>( static_cast<To>( g_ ) );
+}
+
+template < typename From, typename To >
+inline constexpr
+typename
+std::enable_if_t< std::is_convertible_v<From, To> >
+convert( const g<From>& g_, yuva<To>& yuva_ )
+{
+    yuva_ = yuva<To>( static_cast<To>( g_ ) );
 }
 
 /// convert from complex to greyscale
@@ -464,6 +666,8 @@ constexpr std::string_view pixeltype_name()
         return "g<uint16_t>";
     if constexpr (std::is_same_v<T, g_32>)
         return "g<uint32_t>";
+    if constexpr (std::is_same_v<T, g_f32>)
+        return "g<float>";
     if constexpr (std::is_same_v<T, g_f>)
         return "g<double>";
 
@@ -473,6 +677,8 @@ constexpr std::string_view pixeltype_name()
         return "complex<uint16_t>";
     if constexpr (std::is_same_v<T, c_32>)
         return "complex<uint32_t>";
+    if constexpr (std::is_same_v<T, c_f32>)
+        return "complex<float>";
     if constexpr (std::is_same_v<T, c_f>)
         return "complex<double>";
 
@@ -482,6 +688,21 @@ constexpr std::string_view pixeltype_name()
         return "rgba<uint16_t>";
     if constexpr (std::is_same_v<T, rgba_32>)
         return "rgba<uint32_t>";
+    if constexpr (std::is_same_v<T, rgba_f32>)
+        return "rgba<float>";
+    if constexpr (std::is_same_v<T, rgba_f>)
+        return "rgba<double>";
+
+    if constexpr (std::is_same_v<T, rgb_8>)
+        return "rgb<uint8_t>";
+    if constexpr (std::is_same_v<T, rgb_16>)
+        return "rgb<uint16_t>";
+    if constexpr (std::is_same_v<T, rgb_32>)
+        return "rgb<uint32_t>";
+    if constexpr (std::is_same_v<T, rgb_f32>)
+        return "rgb<float>";
+    if constexpr (std::is_same_v<T, rgb_f>)
+        return "rgb<double>";
 
     if constexpr (std::is_same_v<T, yuva_8>)
         return "yuva<uint8_t>";
@@ -489,6 +710,21 @@ constexpr std::string_view pixeltype_name()
         return "yuva<uint16_t>";
     if constexpr (std::is_same_v<T, yuva_32>)
         return "yuva<uint32_t>";
+    if constexpr (std::is_same_v<T, yuva_f32>)
+        return "yuva<float>";
+    if constexpr (std::is_same_v<T, yuva_f>)
+        return "yuva<double>";
+
+    if constexpr (std::is_same_v<T, yuv_8>)
+        return "yuv<uint8_t>";
+    if constexpr (std::is_same_v<T, yuv_16>)
+        return "yuv<uint16_t>";
+    if constexpr (std::is_same_v<T, yuv_32>)
+        return "yuv<uint32_t>";
+    if constexpr (std::is_same_v<T, yuv_f32>)
+        return "yuv<float>";
+    if constexpr (std::is_same_v<T, yuv_f>)
+        return "yuv<double>";
 
     return "unknown pixeltype";
 }
@@ -504,7 +740,15 @@ struct std::formatter<openpiv::core::rgba<T>> : openpiv::core::StreamableFormatt
 {};
 
 template <typename T>
+struct std::formatter<openpiv::core::rgb<T>> : openpiv::core::StreamableFormatter<openpiv::core::rgb<T>>
+{};
+
+template <typename T>
 struct std::formatter<openpiv::core::yuva<T>> : openpiv::core::StreamableFormatter<openpiv::core::yuva<T>>
+{};
+
+template <typename T>
+struct std::formatter<openpiv::core::yuv<T>> : openpiv::core::StreamableFormatter<openpiv::core::yuv<T>>
 {};
 
 template <typename T>

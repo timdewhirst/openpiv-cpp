@@ -5,6 +5,7 @@
 #include "doctest_utils.h"
 
 // std
+#include <cmath>
 #include <thread>
 
 // local
@@ -12,17 +13,20 @@
 
 // to be tested
 #include "algos/fft.h"
-#include "loaders/image_loader.h"
+#include "algos/pocket_fft.h"
+#include "algos/stats.h"
 #include "core/image_utils.h"
+#include "loaders/image_loader.h"
 
 using namespace std::string_literals;
+using namespace openpiv;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 
 TEST_CASE("image_algos_test - FFTTest")
 {
     // generate sinusoidal pattern
-    image_g_f im{ 256, 256 };
+    image im{ 256, 256, pixel_format::GREY_F64 };
     fill( im, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*M_PI*w/8 + 2*M_PI*h/8 ); } );
 
     // save
@@ -30,32 +34,32 @@ TEST_CASE("image_algos_test - FFTTest")
 
     // transform
     FFT fft( im.size() );
-    image_c_f output{ fft.transform( im, direction::FORWARD ) };
+    image output{ fft.transform( im, direction::FORWARD ).detach() };
 
-    REQUIRE( save_to_file( "fft-output.pgm", image_g_f( output ) ) );
+    REQUIRE( save_to_file( "fft-output.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 
     // two peaks; relies on quadrants being unswapped i.e. zero
     // frequency is at edges
     for ( uint32_t y=0; y<output.height(); ++y )
         for ( uint32_t x=0; x<output.width(); ++x )
+        {
+            auto p = point2<uint32_t>{ x, y };
             if ( x == 32 && y == 32 )
             {
-                auto p = point2<uint32_t>{ x, y };
-                REQUIRE( (output[ p ] != c_f{}) );
+                REQUIRE( (output.at<c_f>( p ) != c_f{}) );
             }
             else if ( x == 224 && y == 224 )
             {
-                auto p = point2<uint32_t>{ x, y };
-                REQUIRE( (output[ p ] != c_f{}) );
+                REQUIRE( (output.at<c_f>( p ) != c_f{}) );
             }
             else
             {
-                auto p = point2<uint32_t>{ x, y };
-                REQUIRE( doctest::matchers::WithinAbs(output[ p ].abs_sqr(), 0, 1e-9) );
+                REQUIRE( doctest::matchers::WithinAbs(output.at<c_f>( p ).abs_sqr(), 0, 1e-9) );
             }
+        }
 
     // inverse transform
-    image_g_f g{ real( fft.transform( output, direction::REVERSE ) ) };
+    image g{ real( fft.transform( output, direction::REVERSE ) ) };
 
     REQUIRE( save_to_file( "fft-reverse.pgm", g) );
 }
@@ -63,10 +67,10 @@ TEST_CASE("image_algos_test - FFTTest")
 TEST_CASE("image_algos_test - FFT two real images")
 {
     // generate sinusoidal patterns
-    image_g_f a{ 256, 256 };
+    image a{ 256, 256, pixel_format::GREY_F64 };
     fill( a, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*M_PI*w/8 + 2*M_PI*h/8 ); } );
 
-    image_g_f b{ 256, 256 };
+    image b{ 256, 256, pixel_format::GREY_F64 };
     fill( b,
           [width=b.width()]( uint32_t w, uint32_t h ) {
               return 128 * std::sin( 2*M_PI*(width-w)/8 + 2*M_PI*h/8 );
@@ -80,13 +84,13 @@ TEST_CASE("image_algos_test - FFT two real images")
     FFT fft( a.size() );
     auto [a_fft, b_fft] = fft.transform_real( a, b, direction::FORWARD );
 
-    REQUIRE( save_to_file( "fft-real-output-a.pgm", image_g_f( a_fft ) ) );
-    REQUIRE( save_to_file( "fft-real-output-b.pgm", image_g_f( b_fft ) ) );
+    REQUIRE( save_to_file( "fft-real-output-a.pgm", convert( a_fft, pixel_format::GREY_F64 ) ) );
+    REQUIRE( save_to_file( "fft-real-output-b.pgm", convert( b_fft, pixel_format::GREY_F64 ) ) );
 
     // two peaks; relies on quadrants being unswapped i.e. zero
     // frequency is at edges
     auto checker =
-        [](const image_c_f& im, point2<uint32_t> a, point2<uint32_t> b)
+        [](const image& im, point2<uint32_t> a, point2<uint32_t> b)
         {
             for ( uint32_t y=0; y<im.height(); ++y )
                 for ( uint32_t x=0; x<im.width(); ++x )
@@ -94,11 +98,11 @@ TEST_CASE("image_algos_test - FFT two real images")
                     auto p = point2<uint32_t>{ x, y };
                     if ( p == a || p == b )
                     {
-                        REQUIRE( (im[ p ] != c_f{}) );
+                        REQUIRE( (im.at<c_f>( p ) != c_f{}) );
                     }
                     else
                     {
-                        REQUIRE( doctest::matchers::WithinAbs(im[ p ].abs_sqr(), 0, 1e-9) );
+                        REQUIRE( doctest::matchers::WithinAbs(im.at<c_f>( p ).abs_sqr(), 0, 1e-9) );
                     }
                 }
         };
@@ -109,7 +113,7 @@ TEST_CASE("image_algos_test - FFT two real images")
 
 TEST_CASE("image_algos_test - FFT Different Size")
 {
-    image_g_f im{ 256, 256 };
+    image im{ 256, 256, pixel_format::GREY_F64 };
     fill( im, []( uint32_t w, uint32_t ){ return (w/2)%2 ? 1.0 : 0.0; } );
 
     FFT fft( { 512, 512 } );
@@ -131,85 +135,227 @@ TEST_CASE("image_algos_test - FFT non-power-of-two size")
 TEST_CASE("image_algos_test - cross_correlation_test")
 {
     // load images
-    auto im = load_from_file< g_f >( "corr_a.tiff" );
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
 
     // extract a couple of small windows
     size s{ 128, 128 };
-    auto view_a = create_image_view( im, rect{ {20, 20}, s } );
-    auto view_b = create_image_view( im, rect{ {20, 25}, s } );
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
 
     REQUIRE( save_to_file( "cross-correlate-a-input.pgm", view_a ) );
     REQUIRE( save_to_file( "cross-correlate-b-input.pgm", view_b ) );
 
     // prepare & correlate
     FFT fft( view_a.size() );
-    image_g_f output{ fft.cross_correlate( view_a, view_b ) };
+    image output{ fft.cross_correlate( view_a, view_b ) };
+
+    // output format matches the input depth
+    REQUIRE( output.format() == pixel_format::GREY_F64 );
 
     // write output
     REQUIRE( save_to_file( "cross-correlate-output.pgm", output ) );
+
+    // correlation of a window with itself peaks at the centre
+    image self_output{ fft.cross_correlate( view_a, view_a ) };
+    auto [min, max] = algos::find_image_range( self_output );
+    REQUIRE( max > min );
+    const auto centre_value = self_output.at<g_f>( point2<uint32_t>( 64, 64 ) );
+    REQUIRE( doctest::matchers::WithinAbs( centre_value, max, 1e-6 ) );
+
+    // correlation of the distinct windows must agree with the
+    // real-transform shortcut; regression test for a bug where an
+    // invalidated cache reference (the second transform overwrites
+    // the buffer the first result refers to) turned the complex
+    // correlation into a correlation of the second image with
+    // itself - masked by any self-correlation check
+    // correlation of the distinct windows must peak where the
+    // real-transform shortcut peaks; regression test for a bug
+    // where an invalidated cache reference (the second transform
+    // overwrites the buffer the first result refers to) turned the
+    // complex correlation into a correlation of the second image
+    // with itself - which peaks at the centre and is masked by any
+    // self-correlation check
+    image cross_output{ fft.cross_correlate( view_a, view_b ) };
+    image via_real{ fft.cross_correlate_real( view_a, view_b ) };
+    REQUIRE( cross_output.format() == via_real.format() );
+    REQUIRE( cross_output.size() == via_real.size() );
+
+    const auto argmax = []( const image& im ) -> image::index_t
+        {
+            image::index_t best{ 0 };
+            double best_value{ im.at<g_f>( 0 ) };
+            for ( image::index_t i = 1; i < im.pixel_count(); ++i )
+                if ( im.at<g_f>( i ) > best_value )
+                {
+                    best = i;
+                    best_value = im.at<g_f>( i );
+                }
+            return best;
+        };
+
+    const image::index_t cross_peak{ argmax( cross_output ) };
+    const image::index_t real_peak{ argmax( via_real ) };
+    REQUIRE( cross_peak == real_peak );
+
+    // and a self-correlation peaks at the centre, which is a
+    // different position from the cross-correlation peak of the
+    // row-offset windows
+    const image::index_t self_peak{ argmax( self_output ) };
+    REQUIRE( cross_peak != self_peak );
+}
+
+TEST_CASE("image_algos_test - correlation plane equivalence (FFT)")
+{
+    // load images
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
+
+    // extract a couple of small windows offset relative to each
+    // other so the correlation is a genuine cross-correlation
+    size s{ 128, 128 };
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
+
+    FFT fft( view_a.size() );
+
+    // the real-transform shortcut computes F(b) * conj(F(a)) via a
+    // single packed FFT; with a complete unravel its correlation
+    // plane must match the complex-transform plane to within
+    // floating-point noise
+    image via_complex{ fft.cross_correlate( view_a, view_b ) };
+    image via_real{ fft.cross_correlate_real( view_a, view_b ) };
+
+    REQUIRE( via_complex.format() == via_real.format() );
+    REQUIRE( via_complex.size() == via_real.size() );
+
+    double scale{ 0.0 };
+    double max_err{ 0.0 };
+    for ( image::index_t i = 0; i < via_complex.pixel_count(); ++i )
+    {
+        const double c{ via_complex.at<g_f>( i ) };
+        const double r{ via_real.at<g_f>( i ) };
+        scale = std::max( scale, std::abs( c ) );
+        max_err = std::max( max_err, std::abs( c - r ) );
+    }
+    REQUIRE( scale > 0.0 );
+    REQUIRE( max_err < 1e-9 * scale );
+}
+
+TEST_CASE("image_algos_test - correlation plane equivalence (PocketFFT)")
+{
+    // load images
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
+
+    // extract a couple of small windows offset relative to each
+    // other so the correlation is a genuine cross-correlation
+    size s{ 128, 128 };
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
+
+    FFT fft( view_a.size() );
+    PocketFFT pocket( view_a.size() );
+
+    // both PocketFFT correlations must match the (ground-truth
+    // validated) complex-transform plane to floating-point noise:
+    // the complex path via c2c, the real path via the completed
+    // r2c half spectrum
+    image reference{ fft.cross_correlate( view_a, view_b ) };
+    image via_pocket{ pocket.cross_correlate( view_a, view_b ) };
+    image via_pocket_real{ pocket.cross_correlate_real( view_a, view_b ) };
+
+    const auto max_plane_err = []( const image& lhs, const image& rhs ) -> std::pair<double, double>
+        {
+            double scale{ 0.0 };
+            double max_err{ 0.0 };
+            for ( image::index_t i = 0; i < lhs.pixel_count(); ++i )
+            {
+                const double l{ lhs.at<g_f>( i ) };
+                const double r{ rhs.at<g_f>( i ) };
+                scale = std::max( scale, std::abs( l ) );
+                max_err = std::max( max_err, std::abs( l - r ) );
+            }
+            return { scale, max_err };
+        };
+
+    const auto [scale_p, err_p] = max_plane_err( reference, via_pocket );
+    REQUIRE( scale_p > 0.0 );
+    REQUIRE( err_p < 1e-9 * scale_p );
+
+    const auto [scale_pr, err_pr] = max_plane_err( reference, via_pocket_real );
+    REQUIRE( scale_pr > 0.0 );
+    REQUIRE( err_pr < 1e-9 * scale_pr );
 }
 
 TEST_CASE("image_algos_test - auto_correlation_test")
 {
     // load images
-    auto im = load_from_file< g_f >( "corr_a.tiff" );
+    auto im = load_from_file( "corr_a.tiff" );
+    im = convert( im, pixel_format::GREY_F64 );
 
     // extract a couple of small windows
     size s{ 128, 128 };
-    auto view_a = create_image_view( im, rect{ {20, 20}, s } );
-    auto view_b = create_image_view( im, rect{ {20, 25}, s } );
+    auto view_a = im.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im.sub_image( rect{ {20, 25}, s } );
 
     // combine
-    image_g_f data{ view_a.width(), view_a.height() };
-    data = view_a + view_b;
+    image data{ 128, 128, pixel_format::GREY_F64 };
+    for ( image::index_t i = 0; i < data.pixel_count(); ++i )
+        data.at<g_f>( i ) = view_a.at<g_f>( i ) + view_b.at<g_f>( i );
     REQUIRE( save_to_file( "auto-correlate-input.pgm", data) );
 
-    // prepare & corrrelate
+    // prepare & correlate; output is complex with zero imaginary part
     FFT fft( data.size() );
-    image_g_f output{ fft.auto_correlate( data ) };
-    REQUIRE( save_to_file( "auto-correlate-output.pgm", output) );
+    image output{ fft.auto_correlate( data ) };
+    REQUIRE( output.format() == pixel_format::COMPLEX_F64 );
+    REQUIRE( save_to_file( "auto-correlate-output.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 }
 
 TEST_CASE("image_algos_test - fft_real_test")
 {
     // load images
-    auto im_a = load_from_file< g_f >( "corr_a.tiff" );
+    auto im_a = load_from_file( "corr_a.tiff" );
+    im_a = convert( im_a, pixel_format::GREY_F64 );
 
     // extract a couple of small windows
     size s{ 128, 128 };
-    auto view_a = create_image_view( im_a, rect{ {20, 20}, s } );
-    auto view_b = create_image_view( im_a, rect{ {20, 25}, s } );
+    auto view_a = im_a.sub_image( rect{ {20, 20}, s } );
+    auto view_b = im_a.sub_image( rect{ {20, 25}, s } );
 
     // combine
-    image_g_f data{ s };
-    data = view_a + view_b;
+    image data{ s, pixel_format::GREY_F64 };
+    for ( image::index_t i = 0; i < data.pixel_count(); ++i )
+        data.at<g_f>( i ) = view_a.at<g_f>( i ) + view_b.at<g_f>( i );
 
     REQUIRE( save_to_file( "fft_corr_a_input.pgm", data ) );
 
     // transform
     FFT fft( data.size() );
-    image_c_f output;
-    output = fft.transform( data, direction::FORWARD );
+    image output{ fft.transform( data, direction::FORWARD ).detach() };
+    REQUIRE( output.format() == pixel_format::COMPLEX_F64 );
 
     // remove DC
-    output[ {0, 0} ] = c_f{};
+    output.at<c_f>( {0, 0} ) = c_f{};
 
     // transformed
     swap_quadrants( output );
-    REQUIRE( save_to_file( "fft_corr_a_fourier.pgm", image_g_f{ output }) );
+    REQUIRE( save_to_file( "fft_corr_a_fourier.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 
     // complex conjugate
     for ( uint32_t h=0; h<output.height(); ++h )
         for ( uint32_t w=0; w<output.width(); ++w )
-            output[ {w, h} ] = output[ {w, h} ] * output[ {w, h} ].conj();
+        {
+            auto p = point2<uint32_t>{ w, h };
+            output.at<c_f>( p ) = output.at<c_f>( p ) * output.at<c_f>( p ).conj();
+        }
 
-    REQUIRE( save_to_file( "fft_corr_a_conj.pgm", image_g_f{ output }) );
+    REQUIRE( save_to_file( "fft_corr_a_conj.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 
     // inverse
-    output = fft.transform( image_g_f{ output }, direction::REVERSE );
+    output = fft.transform( convert( output, pixel_format::GREY_F64 ), direction::REVERSE ).detach();
     swap_quadrants( output );
 
     // write output
-    REQUIRE( save_to_file( "fft_corr_a_output.pgm", image_g_f{ output }) );
+    REQUIRE( save_to_file( "fft_corr_a_output.pgm", convert( output, pixel_format::GREY_F64 ) ) );
 }
-

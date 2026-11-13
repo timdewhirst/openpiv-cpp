@@ -1,4 +1,3 @@
-
 // google
 #include <benchmark/benchmark.h>
 
@@ -9,18 +8,19 @@
 // test
 #include "test_utils.h"
 
+using namespace openpiv;
 using namespace openpiv::core;
 using namespace openpiv::algos;
 
 static void fft_cross_correlation_view_benchmark(benchmark::State& state)
 {
-    image_c_f im_a{ load_from_file< g_f >( "corr_a.tiff" ) };
-    uint32_t d{ (uint32_t)state.range(0) };
+    image im_a{ convert( load_from_file( "corr_a.tiff" ), pixel_format::GREY_F64 ) };
+    const uint32_t d{ static_cast<uint32_t>( state.range(0) ) };
     size s{ d, d };
     FFT fft( s );
 
-    auto view_a = create_image_view( im_a, rect{ {0, 0}, s } );
-    auto view_b = create_image_view( im_a, rect{ {1, 1}, s } );
+    auto view_a = im_a.sub_image( rect{ {0, 0}, s } );
+    auto view_b = im_a.sub_image( rect{ {1, 1}, s } );
 
     for (auto _ : state)
     {
@@ -33,13 +33,13 @@ BENCHMARK(fft_cross_correlation_view_benchmark)->Threads(4)->RangeMultiplier(2)-
 
 static void fft_cross_correlation_extract_benchmark(benchmark::State& state)
 {
-    image_c_f im_a{ load_from_file< g_f >( "corr_a.tiff" ) };
-    uint32_t d{ (uint32_t)state.range(0) };
+    image im_a{ convert( load_from_file( "corr_a.tiff" ), pixel_format::GREY_F64 ) };
+    const uint32_t d{ static_cast<uint32_t>( state.range(0) ) };
     size s{ d, d };
     FFT fft( s );
 
-    auto sub_a = extract( im_a, rect{ {0, 0}, s } );
-    auto sub_b = extract( im_a, rect{ {1, 1}, s } );
+    auto sub_a = im_a.sub_image( rect{ {0, 0}, s } ).detach();
+    auto sub_b = im_a.sub_image( rect{ {1, 1}, s } ).detach();
 
     for (auto _ : state)
     {
@@ -52,12 +52,12 @@ BENCHMARK(fft_cross_correlation_extract_benchmark)->Threads(4)->RangeMultiplier(
 
 static void fft_auto_correlation_view_benchmark(benchmark::State& state)
 {
-    image_c_f im_a{ load_from_file< g_f >( "corr_a.tiff" ) };
-    uint32_t d{ (uint32_t)state.range(0) };
+    image im_a{ convert( load_from_file( "corr_a.tiff" ), pixel_format::GREY_F64 ) };
+    const uint32_t d{ static_cast<uint32_t>( state.range(0) ) };
     size s{ d, d };
     FFT fft( s );
 
-    auto view_a = create_image_view( im_a, rect{ {}, s } );
+    auto view_a = im_a.sub_image( rect{ {}, s } );
 
     for (auto _ : state)
     {
@@ -70,12 +70,12 @@ BENCHMARK(fft_auto_correlation_view_benchmark)->Threads(4)->RangeMultiplier(2)->
 
 static void fft_auto_correlation_extract_benchmark(benchmark::State& state)
 {
-    image_c_f im_a{ load_from_file< g_f >( "corr_a.tiff" ) };
-    uint32_t d{ (uint32_t)state.range(0) };
+    image im_a{ convert( load_from_file( "corr_a.tiff" ), pixel_format::GREY_F64 ) };
+    const uint32_t d{ static_cast<uint32_t>( state.range(0) ) };
     size s{ d, d };
     FFT fft( s );
 
-    auto view_a = extract( im_a, rect{ {}, s } );
+    auto view_a = im_a.sub_image( rect{ {}, s } ).detach();
 
     for (auto _ : state)
     {

@@ -25,6 +25,7 @@ libopenpiv = static_library('openpivcore',
   ],
   cpp_args: ['-D_USE_MATH_DEFINES'],
   dependencies: [
+    mimalloc_dep,
     pocketfft_dep,
     threads_dep,
     tiff_dep],

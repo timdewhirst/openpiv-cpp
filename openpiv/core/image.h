@@ -1,258 +1,318 @@
-
 #pragma once
 
 // std
 #include <cstdint>
-#include <exception>
-#include <iostream>
+#include <cstring>
+#include <functional>
+#include <memory>
+#include <ostream>
 #include <tuple>
-#include <typeinfo>
-#include <type_traits>
 #include <utility>
-#include <vector>
 
 // local
+#include "core/exception_builder.h"
 #include "core/format_utils.h"
-#include "core/image_expression.h"
-#include "core/image_type_traits.h"
+#include "core/pixel_format.h"
 #include "core/pixel_types.h"
 #include "core/point.h"
 #include "core/rect.h"
 #include "core/size.h"
-#include "core/util.h"
-#include "core/exception_builder.h"
 
 namespace openpiv::core {
 
-/// basic 2-dimensional image; data is stored as a
-/// contiguous array of type T
-template < typename T >
+/// basic 2-dimensional image.
+///
+/// an image does not own its data: storage is acquired from an external
+/// allocator and referenced via std::shared_ptr. sharing is central to
+/// the design - copying an image is a shallow, view-like operation and
+/// images may alias one another via sub_image().
+///
+/// an image is fixed in size and format at construction; there is no
+/// resize. to change size, construct a new image; to change format, use
+/// convert().
 class image
 {
 public:
-    using type = T;
-    using pixel_t = T;
+    using byte_t = uint8_t;
     using index_t = size_t;
-    using data_t = typename std::vector<T>;
 
-    using iterator = typename data_t::iterator;
-    using const_iterator = typename data_t::const_iterator;
-    using reverse_iterator = typename data_t::reverse_iterator;
-    using const_reverse_iterator = typename data_t::const_reverse_iterator;
+    /// storage is provided by an external allocator which is handed a
+    /// byte count and must return a reference-counted buffer; the
+    /// allocator is responsible for how the data is constructed and
+    /// (once the last reference is dropped) released
+    using allocator_t = std::function< std::shared_ptr<byte_t>( size_t ) >;
+
+    /// default allocator: zero-initialized heap storage
+    static allocator_t default_allocator()
+    {
+        return []( size_t bytes ) -> std::shared_ptr<byte_t>
+        {
+            byte_t* result = new byte_t[ bytes ];
+            memset(result, 0, bytes);
+            return { result, []( byte_t* p ) { delete[] p; } };
+        };
+    }
 
     // ctor
-    image() = default;
+    /// images are fixed in geometry and format at construction;
+    /// there is no empty image
+    image() = delete;
     image( const image& ) = default;
     image( image&& ) = default;
+    image& operator=( const image& ) = default;
+    image& operator=( image&& ) = default;
 
-    /// empty image
-    image( uint32_t w, uint32_t h )
-        : image( w, h, T{} )
+    /// new image of the given format; the image is zero-initialized
+    /// note: \a r may be positioned anywhere; the position is carried
+    /// by rect() and is used when placing sub-images and extractions
+    image( uint32_t w, uint32_t h, pixel_format fmt,
+           const allocator_t& allocator = default_allocator() )
+        : image( core::rect::from_size( core::size{ w, h } ), fmt, allocator )
     {}
-    image( const core::size& s )
-        : image( s, T{} )
+    image( const core::size& s, pixel_format fmt,
+           const allocator_t& allocator = default_allocator() )
+        : image( core::rect::from_size( s ), fmt, allocator )
     {}
-    image( const core::rect& r )
-        : image( r, T{} )
-    {}
-
-    /// image with default value
-    image( uint32_t w, uint32_t h, T value )
-        : r_( rect::from_size( {w, h} ) )
-        , data_( w*h, value )
-    {}
-    image( const core::size& s, T value )
-        : r_( rect::from_size(s) )
-        , data_( s.area(), value )
-    {}
-    image( const core::rect& r, T value )
-        : r_( r )
-        , data_( r.area(), value )
-    {}
-
-    /// conversion from another similar image; expensive!
-    template < template<typename> class ImageT,
-               typename ContainedT,
-               typename = typename std::enable_if_t<
-                   pixeltype_is_convertible_v< ContainedT, T > &&
-                   is_imagetype_v< ImageT<ContainedT> > >
-               >
-    explicit image( const ImageT<ContainedT>& p )
-        : r_( p.rect() )
-        , data_( p.pixel_count() )
+    image( const core::rect& r, pixel_format fmt,
+           const allocator_t& allocator = default_allocator() )
     {
-        *this = p;
+        if ( fmt == pixel_format::UNKNOWN )
+            core::exception_builder<std::invalid_argument>()
+                << "pixel format must be known: " << fmt;
+
+        const pixel_format_info& fi{ core::format_info( fmt ) };
+        r_ = r;
+        fmt_ = fmt;
+        pitch_ = static_cast<size_t>( r.width() ) * fi.bytes_per_pixel;
+        data_ = allocator( static_cast<size_t>( r.area() ) * fi.bytes_per_pixel );
     }
 
-    template <typename E,
-              typename = typename std::enable_if_t< is_imageexpression_v<E> > >
-    explicit image( const E& e )
+    /// construct a sub-image sharing the underlying data; \a r is in
+    /// the local coordinates of this image and must be wholly
+    /// contained within it; the result has the same format and row
+    /// pitch as this image and its rect() is positioned relative to
+    /// this image's rect()
+    image sub_image( const core::rect& r ) const
     {
-        *this = e;
+        require_sub_rect( r );
+
+        image result{ { { r_.left() + r.left(), r_.bottom() + r.bottom() }, r.size() },
+                      fmt_,
+                      pitch_,
+                      { data_, data_.get() + offset_of( r ) } };
+        return result;
     }
 
-    /// resize the image; this is destructive and any data contained
-    /// after a re-size should be considered invalid
-    void resize( uint32_t w, uint32_t h )
+    /// return an image with its own copy of the data; geometry,
+    /// including the rect position, is preserved - a deep copy of
+    /// a sub-image is a positioned, self-contained image
+    image detach( const allocator_t& allocator = default_allocator() ) const
     {
-        resize( {w, h} );
+        image result{ r_, fmt_, allocator };
+
+        const size_t row_bytes{ static_cast<size_t>( r_.width() ) * info().bytes_per_pixel };
+        for ( uint32_t row = 0; row < height(); ++row )
+            std::memcpy( result.line( row ), line( row ), row_bytes );
+
+        return result;
     }
 
-    /// resize the image; this is destructive and any data contained
-    /// after a re-size should be considered invalid
-    void resize( const core::size& s )
+    /// equality; images are equal if they have the same geometry,
+    /// format and content - the underlying storage may differ
+    inline bool operator==( const image& rhs ) const
     {
-        if ( s == r_.size() )
-            return;
+        if ( r_ != rhs.r_ || fmt_ != rhs.fmt_ )
+            return false;
 
-        r_ = core::rect( r_.bottomLeft(), s );
-        data_.resize( pixel_count() );
+        // compare rows: pitch may differ between shared views
+        const size_t row_bytes{ static_cast<size_t>( r_.width() ) * info().bytes_per_pixel };
+        const byte_t* l{ data_.get() };
+        const byte_t* r{ rhs.data_.get() };
+        for ( uint32_t row = 0; row < static_cast<uint32_t>( r_.height() ); ++row, l += pitch_, r += rhs.pitch_ )
+            if ( std::memcmp( l, r, row_bytes ) != 0 )
+                return false;
+
+        return true;
     }
+    inline bool operator!=( const image& rhs ) const { return !operator==( rhs ); }
 
-
-    /// assignment
-    image& operator=(const image& rhs)
+    /// pixel accessor with runtime-checked pixel type; \a i is a
+    /// linear index: x = i % width(), y = i / width()
+    template <typename PixelT>
+    PixelT& at( index_t i )
     {
-        r_ = rhs.r_;
-        data_ = rhs.data_;
-        return *this;
-    }
+        if ( format_for_v<PixelT> != fmt_ )
+            throw_pixel_type_mismatch<PixelT>();
+        if ( i >= pixel_count() )
+            throw_pixel_index_out_of_range( i );
 
-    /// move assignment
-    image& operator=(image&& rhs)
+        const pixel_format_info& fi{ info() };
+        const size_t x{ i % width() };
+        const size_t y{ i / width() };
+        return *reinterpret_cast<PixelT*>( data_.get() + y * pitch_ + x * fi.bytes_per_pixel );
+    }
+    template <typename PixelT>
+    const PixelT& at( index_t i ) const { return const_cast<image*>(this)->at<PixelT>( i ); }
+
+    /// pixel accessor with runtime-checked pixel type; \a xy is in
+    /// local coordinates
+    template <typename PixelT>
+    PixelT& at( const point2<uint32_t>& xy )
     {
-        data_ = std::move(rhs.data_);
-        r_    = std::move(rhs.r_);
+        if ( format_for_v<PixelT> != fmt_ )
+            throw_pixel_type_mismatch<PixelT>();
+        if ( xy[0] >= width() || xy[1] >= height() )
+            throw_point_out_of_range( xy );
 
-        return *this;
+        const pixel_format_info& fi{ info() };
+        return *reinterpret_cast<PixelT*>( data_.get() + static_cast<size_t>(xy[1]) * pitch_ + static_cast<size_t>(xy[0]) * fi.bytes_per_pixel );
     }
+    template <typename PixelT>
+    const PixelT& at( const point2<uint32_t>& xy ) const { return const_cast<image*>(this)->at<PixelT>( xy ); }
 
-    /// conversion assignment
-    template < template<typename> class ImageT,
-               typename ContainedT,
-               typename = typename std::enable_if_t<
-                   pixeltype_is_convertible_v< ContainedT, T > &&
-                   is_imagetype_v< ImageT<ContainedT> > >
-               >
-    image& operator=( const ImageT<ContainedT>& p )
+    /// raw pixel data as a typed pointer; the pixel type is
+    /// runtime-checked; pixel data is only packed for full images -
+    /// for sub-images use at() or line()
+    template <typename PixelT>
+    PixelT* pixels()
     {
-        resize( p.size() );
-
-        // no alternative but to iterate
-        for ( index_t i=0; i<p.pixel_count(); ++i )
-            convert( p[i], data_[i] );
-
-        return *this;
+        check_pixel_type<PixelT>();
+        return reinterpret_cast<PixelT*>( data_.get() );
     }
-
-    template <typename E,
-              typename = typename std::enable_if_t< is_imageexpression_v<E> > >
-    image& operator=(const E& e)
-    {
-        resize( e.size() );
-        for ( index_t i=0; i<pixel_count(); ++i )
-            data_[i] = e[i];
-
-        return *this;
-    }
-
-    /// equality
-    inline bool operator==(const image& rhs) const
-    {
-        return
-            r_ == rhs.r_ &&
-            data_ == rhs.data_;
-    }
-    inline bool operator!=(const image& rhs) const { return !operator==(rhs); }
-
-    /// pixel accessor
-    inline T& operator[](size_t i) { return data_[i]; }
-    inline const T& operator[](size_t i) const { return const_cast<image*>(this)->operator[](i); }
-
-    /// pixel accessor by point
-    inline T& operator[]( const point2<uint32_t>& xy ) { return data_[xy[1]*r_.width() + xy[0]]; }
-    inline const T& operator[]( const point2<uint32_t>& xy ) const
-    {
-        return const_cast<image*>(this)->operator[](xy);
-    }
+    template <typename PixelT>
+    const PixelT* pixels() const { return const_cast<image*>(this)->pixels<PixelT>(); }
 
     /// raw data accessor
-    inline T* data() { return &data_[0]; }
-    inline const T* data() const { return const_cast<image*>(this)->data(); }
+    inline byte_t* data() { return data_.get(); }
+    inline const byte_t* data() const { return const_cast<image*>(this)->data(); }
 
     /// raw data by line
-    inline T* line( size_t i )
+    inline byte_t* line( size_t i )
     {
-        if (i>r_.height())
-            exception_builder<std::range_error>() << "line out of range (" << i << ", max is: " << r_.height() << ")";
+        if ( i > r_.height() )
+            core::exception_builder<std::range_error>()
+                << "line out of range (" << i << ", max is: " << r_.height() << ")";
 
-        return &data_[i*r_.width()];
+        return data_.get() + i * pitch_;
     }
-    inline const T* line( size_t i ) const { return const_cast<image*>(this)->line(i); }
-
-    /// iterators
-    iterator begin() { return std::begin( data_ ); }
-    iterator end() { return std::end( data_ ); }
-    const_iterator begin() const { return std::begin( data_ ); }
-    const_iterator end() const { return std::end( data_ ); }
-    reverse_iterator rbegin() { return std::rbegin( data_ ); }
-    reverse_iterator rend() { return std::rend( data_ ); }
-    const_reverse_iterator rbegin() const { return std::rbegin( data_ ); }
-    const_reverse_iterator rend() const { return std::rend( data_ ); }
+    inline const byte_t* line( size_t i ) const { return const_cast<image*>(this)->line( i ); }
 
     /// geometry accessors
-    inline constexpr uint32_t width() const { return r_.width(); }
-    inline constexpr uint32_t height() const { return r_.height(); }
-    inline constexpr core::size size() const { return r_.size(); }
-    inline constexpr index_t pixel_count() const { return r_.area(); }
-    inline constexpr core::rect rect() const { return r_; }
+    inline uint32_t width() const { return r_.width(); }
+    inline uint32_t height() const { return r_.height(); }
+    inline core::size size() const { return r_.size(); }
+    inline index_t pixel_count() const { return r_.area(); }
+    inline core::rect rect() const { return r_; }
 
-    // distance between pixels in x and y directions
-    inline constexpr std::tuple<size_t, size_t> stride() const
+    /// format accessors
+    inline pixel_format format() const { return fmt_; }
+    inline pixel_format_info info() const
     {
-        return { sizeof(pixel_t), width() * sizeof(pixel_t) };
+        return core::format_info( fmt_ );
     }
+
+    /// distance between pixel components (x direction) and rows (y
+    /// direction), in bytes; row pitch is preserved by sub_image
+    inline std::tuple<size_t, size_t> stride() const
+    {
+        return { info().bytes_per_pixel, pitch_ };
+    }
+    inline size_t pitch() const { return pitch_; }
 
     /// swap
     void swap( image& rhs )
     {
         std::swap( r_, rhs.r_ );
+        std::swap( fmt_, rhs.fmt_ );
+        std::swap( pitch_, rhs.pitch_ );
         std::swap( data_, rhs.data_ );
     }
 
 private:
-    core::rect r_;
-    data_t data_;
+    /// construct an image over existing storage; for internal use
+    /// (sub_image) - does not allocate
+    image( const core::rect& r, pixel_format fmt, size_t pitch, std::shared_ptr<byte_t> data )
+        : r_( r )
+        , fmt_( fmt )
+        , pitch_( pitch )
+        , data_( std::move( data ) )
+    {}
+
+    /// byte offset of the first pixel of \a r (local coordinates)
+    size_t offset_of( const core::rect& r ) const
+    {
+        return static_cast<size_t>( r.bottom() ) * pitch_ +
+               static_cast<size_t>( r.left() ) * info().bytes_per_pixel;
+    }
+
+    /// ensure \a r (local coordinates) is valid for sub_image/extract
+    void require_sub_rect( const core::rect& r ) const
+    {
+        const core::rect bounds{ core::rect::from_size( r_.size() ) };
+        if ( !bounds.contains( r ) )
+            core::exception_builder<std::out_of_range>()
+                << "rect (" << r << ") not contained within image (" << bounds << ")";
+    }
+
+    template <typename PixelT>
+    void check_pixel_type() const
+    {
+        if ( format_for_v<PixelT> != fmt_ )
+            throw_pixel_type_mismatch<PixelT>();
+    }
+
+    /// error paths are isolated into cold, out-of-line functions:
+    /// their bodies construct formatted exception messages which
+    /// would otherwise prevent at() and friends from being inlined
+    /// into callers
+    template <typename PixelT>
+    [[gnu::cold, gnu::noinline]]
+    void throw_pixel_type_mismatch() const
+    {
+        core::exception_builder<std::runtime_error>()
+            << "pixel type mismatch: " << pixeltype_name<PixelT>()
+            << " does not match " << fmt_;
+    }
+
+    [[gnu::cold, gnu::noinline]]
+    void throw_pixel_index_out_of_range( index_t i ) const
+    {
+        core::exception_builder<std::out_of_range>()
+            << "pixel index out of range: " << i << ", max is: " << pixel_count();
+    }
+
+    [[gnu::cold, gnu::noinline]]
+    void throw_point_out_of_range( const point2<uint32_t>& xy ) const
+    {
+        core::exception_builder<std::out_of_range>()
+            << "point outside of image: [" << xy[0] << ", " << xy[1] << "], image is: "
+            << width() << "x" << height();
+    }
+
+    core::rect r_{};
+    pixel_format fmt_{ pixel_format::UNKNOWN };
+    size_t pitch_{ 0 };
+    std::shared_ptr<byte_t> data_;
 };
 
-
-template <typename PixelT>
-void swap( image<PixelT>& lhs, image<PixelT>& rhs )
+/// swap
+inline void swap( image& lhs, image& rhs )
 {
-    lhs.swap(rhs);
+    lhs.swap( rhs );
 }
 
-/// ostream operator
-template < typename T >
-std::ostream& operator<<( std::ostream& os, const image<T>& p )
-{
-    os << "image<" << pixeltype_name<T>() << ">[" << p.rect() << "][" << (void*)&p << "] "
-       << "data @ " << (void*)p.data();
 
+/// ostream operator
+inline std::ostream& operator<<( std::ostream& os, const image& im )
+{
+    os << "image[" << im.format() << "][" << im.rect() << "]"
+       << "[pitch: " << im.pitch() << "]"
+       << "[data @ " << static_cast<const void*>( im.data() ) << "]";
     return os;
 }
 
-
-/// standard image types
-using image_g_8     = image< g_8 >;
-using image_g_16    = image< g_16 >;
-using image_g_f     = image< g_f >;
-using image_rgba_8  = image< rgba_8 >;
-using image_rgba_16 = image< rgba_16 >;
-using image_c_f     = image< c_f >;
-
 }
 
-template <typename T>
-struct std::formatter<openpiv::core::image<T>> : openpiv::core::StreamableFormatter<openpiv::core::image<T>> 
+template <>
+struct std::formatter<openpiv::core::image> : openpiv::core::StreamableFormatter<openpiv::core::image>
 {};

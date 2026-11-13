@@ -1,4 +1,3 @@
-
 // openpiv
 #include "core/exception_builder.h"
 #include "core/image.h"
@@ -7,9 +6,6 @@
 
 using namespace openpiv;
 using namespace openpiv::core;
-
-// local
-#include "pyutils.h"
 
 // std
 #include <fstream>
@@ -24,8 +20,8 @@ namespace py = pybind11;
 
 void add_loader(py::module& m)
 {
-    m.def( "load_g_u16",
-           [](const std::string& filename) -> std::vector<image_g_16>
+    m.def( "load",
+           [](const std::string& filename) -> std::vector<image>
            {
                // open file
                std::ifstream is(filename, std::ios::binary);
@@ -42,14 +38,13 @@ void add_loader(py::module& m)
                    core::exception_builder<std::runtime_error>() << "failed to open with loader " << filename;
 
                // load all images
-               std::vector<image_g_16> images;
+               std::vector<image> images;
                for ( size_t index = 0; index < loader->num_images(); ++index )
                {
-                   image_g_16 im;
-                   loader->extract( index, im );
-                   images.push_back( std::move( im ) );
+                   auto im{ loader->extract( index ) };
+                   if ( im )
+                       images.push_back( std::move( *im ) );
                }
                return images;
            });
 }
-

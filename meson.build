@@ -33,6 +33,7 @@ doctest_dep = dependency('doctest')
 benchmark_dep = dependency('benchmark_main')
 cxxopts_dep = dependency('cxxopts')
 pocketfft_dep = dependency('pocketfft')
+mimalloc_dep = dependency('mimalloc')
 
 # Subdirectories
 subdir('openpiv')
