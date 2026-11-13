@@ -121,6 +121,21 @@ bool SDL2Backend::should_close() const
     return done_;
 }
 
+namespace
+{
+    /// the display format is chosen so that packed rgba_8 pixels
+    /// (bytes r, g, b, a) can be uploaded without swizzling: the SDL
+    /// format's red mask must cover the first byte in memory, which
+    /// is ABGR8888 on little-endian and RGBA8888 on big-endian.
+    /// (SDL's *A8888 names refer to masks within a 32-bit word, not
+    /// to memory order on this platform)
+#if SDL_BYTEORDER == SDL_LIL_ENDIAN
+    constexpr uint32_t display_format = SDL_PIXELFORMAT_ABGR8888;
+#else
+    constexpr uint32_t display_format = SDL_PIXELFORMAT_RGBA8888;
+#endif
+}
+
 ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
 {
     using namespace openpiv::core;
@@ -178,11 +193,11 @@ ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
         upload = &converted.value();
     }
 
-    // packed rgba_8 (r, g, b, a) matches the memory layout of
-    // SDL_PIXELFORMAT_RGBA8888
+    // packed rgba_8 uploads directly: the display format's masks
+    // match the pixel memory layout (see display_format above)
     SDL_Texture* texture = SDL_CreateTexture(
         renderer_,
-        SDL_PIXELFORMAT_RGBA8888,
+        display_format,
         SDL_TEXTUREACCESS_STATIC,
         static_cast<int>(upload->width()),
         static_cast<int>(upload->height()));
