@@ -47,19 +47,9 @@ public:
     {
         return []( size_t bytes ) -> std::shared_ptr<byte_t>
         {
-            auto storage = std::make_shared<std::vector<byte_t>>( bytes, byte_t{0} );
-            return { storage, storage->data() };
-        };
-    }
-
-    /// allocator for scratch images: the returned storage is
-    /// uninitialised. Use only for intermediates that are fully
-    /// written before being read; sharing semantics are unchanged
-    static allocator_t scratch_allocator()
-    {
-        return []( size_t bytes ) -> std::shared_ptr<byte_t>
-        {
-            return { new byte_t[ bytes ], []( byte_t* p ) { delete[] p; } };
+            byte_t* result = new byte_t[ bytes ];
+            memset(result, 0, bytes);
+            return { result, []( byte_t* p ) { delete[] p; } };
         };
     }
 

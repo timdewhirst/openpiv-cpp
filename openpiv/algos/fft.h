@@ -188,28 +188,15 @@ namespace openpiv::algos {
             // and unravel; all images are full complex images so rows
             // advance by width
             //
-            // the scratch allocator skips zero-initialisation; the
-            // unravel leaves row 0, row height/2 and column 0 of
-            // the results untouched (they read as zero), so those
-            // are zeroed explicitly - far less work than
-            // initialising the whole images
+            // the unravel leaves row 0, row height/2 and column 0 of
+            // the results untouched; those regions are semantic zeros
+            // guaranteed by the zero-initialising default allocator
             const image& transformed = cache().output;
-            image out_a( transformed.size(), pixel_format::COMPLEX_F64, image::scratch_allocator() );
-            image out_b( transformed.size(), pixel_format::COMPLEX_F64, image::scratch_allocator() );
+            image out_a( transformed.size(), pixel_format::COMPLEX_F64 );
+            image out_b( transformed.size(), pixel_format::COMPLEX_F64 );
 
             const auto width = transformed.width();
             const auto height = transformed.height();
-
-            const auto zero_unwritten = [ & ]( image& im )
-                {
-                    c_f* base{ im.pixels<c_f>() };
-                    std::fill_n( base, width, c_f{} );                    // row 0
-                    std::fill_n( base + (height/2)*width, width, c_f{} ); // row height/2
-                    for ( uint32_t h = 0; h < height; ++h )
-                        base[ h*width ] = c_f{};                           // column 0
-                };
-            zero_unwritten( out_a );
-            zero_unwritten( out_b );
 
             for ( uint32_t h=1; h<height/2; ++h)
             {
@@ -251,7 +238,7 @@ namespace openpiv::algos {
                     << std::format("cross_correlate requires greyscale images: {}, {}", a.format(), b.format());
 
             const image& fa = transform( a, direction::FORWARD );
-            image a_fft{ fa.detach( image::scratch_allocator() ) };
+            image a_fft{ fa.detach() };
             const image& fb = transform( b, direction::FORWARD );
 
             // a_fft = fb * conj(a_fft)
@@ -263,7 +250,7 @@ namespace openpiv::algos {
                     *pa = *pb++ * pa->conj();
             }
 
-            image output( size_, a.format(), image::scratch_allocator() );
+            image output( size_, a.format() );
             copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
@@ -292,7 +279,7 @@ namespace openpiv::algos {
                     *pa = *pb++ * pa->conj();
             }
 
-            image output( size_, a.format(), image::scratch_allocator() );
+            image output( size_, a.format() );
             copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
@@ -309,7 +296,7 @@ namespace openpiv::algos {
                 core::exception_builder<std::runtime_error>()
                     << "auto_correlate requires a mono (greyscale or complex) image: " << a.format();
 
-            image a_fft{ transform( a, direction::FORWARD ).detach( image::scratch_allocator() ) };
+            image a_fft{ transform( a, direction::FORWARD ).detach() };
 
             // a_fft = abs_sqr( a_fft )
             for ( uint32_t h = 0; h < a_fft.height(); ++h )
@@ -321,7 +308,7 @@ namespace openpiv::algos {
 
             const image& fr = transform( a_fft, direction::REVERSE );
 
-            image output( size_, pixel_format::COMPLEX_F64, image::scratch_allocator() );
+            image output( size_, pixel_format::COMPLEX_F64 );
             for ( uint32_t h = 0; h < output.height(); ++h )
             {
                 const c_f* pi{ fr.pixels<c_f>() + h * fr.width() };

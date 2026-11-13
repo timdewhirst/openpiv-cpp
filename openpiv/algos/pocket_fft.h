@@ -153,8 +153,8 @@ namespace openpiv::algos {
 
             // non-double inputs are converted for the real transform;
             // note that input strides may arise from sub-images
-            const image& in_a = a.info().depth == pixel_depth::F64 ? a : convert( a, pixel_format::GREY_F64, image::scratch_allocator() );
-            const image& in_b = b.info().depth == pixel_depth::F64 ? b : convert( b, pixel_format::GREY_F64, image::scratch_allocator() );
+            const image& in_a = a.info().depth == pixel_depth::F64 ? a : convert( a, pixel_format::GREY_F64 );
+            const image& in_b = b.info().depth == pixel_depth::F64 ? b : convert( b, pixel_format::GREY_F64 );
 
             pfft::r2c<double>(
                 shape(),
@@ -166,7 +166,7 @@ namespace openpiv::algos {
                 reinterpret_cast<std::complex<double>*>( cache().output.data() ),
                 1.0 );
 
-            image out_a{ cache().output.detach( image::scratch_allocator() ) };
+            image out_a{ cache().output.detach() };
 
             pfft::r2c<double>(
                 shape(),
@@ -178,7 +178,7 @@ namespace openpiv::algos {
                 reinterpret_cast<std::complex<double>*>( cache().temp.data() ),
                 1.0 );
 
-            image out_b{ cache().temp.detach( image::scratch_allocator() ) };
+            image out_b{ cache().temp.detach() };
 
             return { std::move( out_a ), std::move( out_b ) };
         }
@@ -195,7 +195,7 @@ namespace openpiv::algos {
                     << "cross_correlate requires greyscale images: " << a.format();
 
             const image& fa = transform( a, direction::FORWARD );
-            image a_fft{ fa.detach( image::scratch_allocator() ) };
+            image a_fft{ fa.detach() };
             const image& fb = transform( b, direction::FORWARD );
 
             // a_fft = fb * conj(a_fft)
@@ -207,7 +207,7 @@ namespace openpiv::algos {
                     *pa = *pb++ * pa->conj();
             }
 
-            image output( size_, a.format(), image::scratch_allocator() );
+            image output( size_, a.format() );
             copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
@@ -237,7 +237,7 @@ namespace openpiv::algos {
                     *pa = *pb++ * pa->conj();
             }
 
-            image output( size_, pixel_format::GREY_F64, image::scratch_allocator() );
+            image output( size_, pixel_format::GREY_F64 );
             copy_real( transform( a_fft, direction::REVERSE ), output );
             swap_quadrants( output );
 
@@ -254,7 +254,7 @@ namespace openpiv::algos {
                 core::exception_builder<std::runtime_error>()
                     << "auto_correlate requires a mono (greyscale or complex) image: " << a.format();
 
-            image a_fft{ transform( a, direction::FORWARD ).detach( image::scratch_allocator() ) };
+            image a_fft{ transform( a, direction::FORWARD ).detach() };
 
             // a_fft = abs_sqr( a_fft )
             for ( uint32_t h = 0; h < a_fft.height(); ++h )
@@ -266,7 +266,7 @@ namespace openpiv::algos {
 
             const image& fr = transform( a_fft, direction::REVERSE );
 
-            image output( size_, pixel_format::COMPLEX_F64, image::scratch_allocator() );
+            image output( size_, pixel_format::COMPLEX_F64 );
             for ( uint32_t h = 0; h < output.height(); ++h )
             {
                 const c_f* pi{ reinterpret_cast<const c_f*>( fr.line( h ) ) };
