@@ -1,5 +1,8 @@
 // std
+#include <algorithm>
 #include <any>
+#include <format>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <list>
@@ -19,6 +22,7 @@
 // openpiv
 #include "core/format_utils.h"
 #include "core/log.h"
+#include "loaders/image_loader.h"
 
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
@@ -163,16 +167,86 @@ void setup_dialog(RenderNodeManager& m)
              });
 }
 
-void setup_app_menu(RenderNodeManager& m)
+/// Load an image from \a path and open a new window displaying its
+/// content; the window owns the display texture for its lifetime,
+/// releasing it via unload_image when closed
+void setup_image_window(RenderNodeManager& m, Backend* backend, const std::string& path)
+{
+    std::ifstream is(path, std::ios::binary);
+    if (!is.is_open()) {
+        logger::error("failed to open {}", path);
+        return;
+    }
+
+    auto loader{ openpiv::core::image_loader_registry::instance().find(is) };
+    if (!loader) {
+        logger::error("failed to find image loader for {}", path);
+        return;
+    }
+
+    auto im{ loader->load(is) };
+    if (!im) {
+        logger::error("failed to load image from {}", path);
+        return;
+    }
+
+    if (!backend) {
+        logger::error("no backend available to display {}", path);
+        return;
+    }
+
+    const ImTextureID texture{ backend->load_image(*im) };
+    if (texture == ImTextureID_Invalid) {
+        logger::error("failed to display image: {}", path);
+        return;
+    }
+
+    // window title from the file name; the ### suffix keeps the
+    // imgui identity unique so the same file can be opened into
+    // more than one window
+    static unsigned int window_count{ 0 };
+    const std::string filename{ path.substr(path.find_last_of("/\\") + 1) };
+    const std::string title{ std::format("{}###image-{}", filename, window_count++) };
+
+    m.insert("show image: " + filename,
+             [backend, texture, title,
+              w = static_cast<float>(im->width()),
+              h = static_cast<float>(im->height()),
+              open = true]
+             (RenderNodeManager&, RenderNodeList::iterator) mutable -> RenderNode::result_t
+             {
+                 // open at the natural image size; the window is
+                 // resizable
+                 ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_FirstUseEver);
+                 if (!ImGui::Begin(title.c_str(), &open)) {
+                     ImGui::End();
+                     if (!open) {
+                         backend->unload_image(texture);
+                         return RenderNode::RESULT_DISPOSE;
+                     }
+                     return RenderNode::RESULT_OK;
+                 }
+
+                 // fit the image within the window, preserving the
+                 // aspect ratio
+                 const ImVec2 avail{ ImGui::GetContentRegionAvail() };
+                 const float scale{ std::min(avail.x / w, avail.y / h) };
+                 ImGui::Image(ImTextureRef(texture), ImVec2(w * scale, h * scale));
+                 ImGui::End();
+                 return RenderNode::RESULT_OK;
+             });
+}
+
+void setup_app_menu(RenderNodeManager& m, Backend* backend)
 {
     m.insert("build app menu",
-             [](RenderNodeManager& mgr, RenderNodeList::iterator) -> RenderNode::result_t {
+             [backend](RenderNodeManager& mgr, RenderNodeList::iterator) -> RenderNode::result_t {
                  if (ImGui::BeginMainMenuBar()) {
                      if (ImGui::BeginMenu("File")) {
                          if (ImGui::MenuItem("Open", "Ctrl+O")) {
                              std::cout << "opening file dialog...\n";
                              mgr.insert("file open",
-                                        [done=false, opened=false](RenderNodeManager& mgr, RenderNodeList::iterator self) mutable -> RenderNode::result_t {
+                                        [backend, done=false, opened=false](RenderNodeManager& mgr, RenderNodeList::iterator self) mutable -> RenderNode::result_t {
                                             if (done) {
                                                 return RenderNode::RESULT_DISPOSE;
                                             }
@@ -185,7 +259,12 @@ void setup_app_menu(RenderNodeManager& m)
                                             if (ImGuiFD::BeginDialog("Choose File")) {
                                                 if (ImGuiFD::ActionDone()) {
                                                     if (ImGuiFD::SelectionMade()) {
-                                                        mgr.set_state("filename", ImGuiFD::GetSelectionPathString(0));
+                                                        const std::string path{ ImGuiFD::GetSelectionPathString(0) };
+                                                        mgr.set_state("filename", path);
+
+                                                        // load the chosen file and open a
+                                                        // window displaying its content
+                                                        setup_image_window(mgr, backend, path);
                                                     }
                                                     ImGuiFD::CloseCurrentDialog();
                                                     done = true;
@@ -276,7 +355,7 @@ int main(int argc, char* argv[])
     mgr.set_state("dialog_active", true);
 
     // setup
-    setup_app_menu(mgr);
+    setup_app_menu(mgr, backend.get());
     setup_demo(mgr);
     setup_dialog(mgr);
 
