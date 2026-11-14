@@ -207,25 +207,26 @@ void setup_image_window(RenderNodeManager& m, Backend* backend, const std::strin
     static unsigned int window_count{ 0 };
     const std::string filename{ path.substr(path.find_last_of("/\\") + 1) };
     const std::string title{ std::format("{}###image-{}", filename, window_count++) };
+    const std::string active_flag{ std::format("{}_active", filename) };
 
+    m.set_state(active_flag, true);
     m.insert("show image: " + filename,
-             [backend, texture, title,
+             [backend, texture, title, active_flag,
               w = static_cast<float>(im->width()),
-              h = static_cast<float>(im->height()),
-              open = true]
-             (RenderNodeManager&, RenderNodeList::iterator) mutable -> RenderNode::result_t
+              h = static_cast<float>(im->height())]
+             (RenderNodeManager& mgr, RenderNodeList::iterator) mutable -> RenderNode::result_t
              {
+                 bool& image_active = mgr.state<bool>(active_flag);
+
+                 if (!image_active) {
+                     backend->unload_image(texture);
+                     return RenderNode::RESULT_DISPOSE;
+                 }
+
                  // open at the natural image size; the window is
                  // resizable
                  ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_FirstUseEver);
-                 if (!ImGui::Begin(title.c_str(), &open)) {
-                     ImGui::End();
-                     if (!open) {
-                         backend->unload_image(texture);
-                         return RenderNode::RESULT_DISPOSE;
-                     }
-                     return RenderNode::RESULT_OK;
-                 }
+                 ImGui::Begin(title.c_str(), &image_active);
 
                  // fit the image within the window, preserving the
                  // aspect ratio
@@ -233,6 +234,7 @@ void setup_image_window(RenderNodeManager& m, Backend* backend, const std::strin
                  const float scale{ std::min(avail.x / w, avail.y / h) };
                  ImGui::Image(ImTextureRef(texture), ImVec2(w * scale, h * scale));
                  ImGui::End();
+
                  return RenderNode::RESULT_OK;
              });
 }

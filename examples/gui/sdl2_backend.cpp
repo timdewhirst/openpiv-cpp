@@ -18,6 +18,20 @@
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
 
+namespace {
+
+    constexpr ImTextureID sdl_to_imgui(SDL_Texture* t)
+    {
+        return static_cast<ImTextureID>( reinterpret_cast<intptr_t>(t) );
+    }
+
+    constexpr SDL_Texture* imgui_to_sdl(ImTextureID id)
+    {
+        return reinterpret_cast<SDL_Texture*>( static_cast<intptr_t>(id) );
+    }
+
+}
+
 bool SDL2Backend::init(std::string_view window_title)
 {
     // Initialize SDL
@@ -213,13 +227,15 @@ ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
                       static_cast<int>(upload->pitch()));
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
 
-    return static_cast<ImTextureID>( reinterpret_cast<intptr_t>(texture) );
+    auto id = sdl_to_imgui(texture);
+    logger::debug("SDL2Backend::load_image: {}", id);
+    return id;
 }
 
 void SDL2Backend::unload_image(ImTextureID texture)
 {
     if (texture != ImTextureID_Invalid) {
-        SDL_DestroyTexture(
-            reinterpret_cast<SDL_Texture*>( static_cast<intptr_t>(texture) ));
+        logger::debug("SDL2Backend::unload_image: {}", texture);
+        SDL_DestroyTexture(imgui_to_sdl(texture));
     }
 }
