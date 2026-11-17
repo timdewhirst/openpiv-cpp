@@ -7,7 +7,11 @@ project(
 
 # build specific options
 if get_option('buildtype') == 'release'
-  add_project_arguments('-ffast-math', language: 'cpp')
+  if meson.get_compiler('cpp').get_id() == 'msvc'
+    add_project_arguments('/fp:fast', language: 'cpp')
+  else
+    add_project_arguments('-ffast-math', language: 'cpp')
+  endif
 endif
 
 # Options
