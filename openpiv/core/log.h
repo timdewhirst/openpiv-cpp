@@ -20,6 +20,13 @@
 #include "core/enum_helper.h"
 #include "core/format_utils.h"
 
+// the Windows SDK (wingdi.h) defines ERROR as a macro, which
+// collides with the Level enumerators below; the SDK does not use
+// it beyond the definition, so drop the macro here
+#ifdef ERROR
+#undef ERROR
+#endif
+
 namespace openpiv::core::logger {
 
     enum class Level : uint8_t {
