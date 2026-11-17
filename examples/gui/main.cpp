@@ -16,7 +16,7 @@
 #include "imgui_impl_sdlrenderer2.h"
 
 // SDL2
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 // openpiv
 #include "core/format_utils.h"
