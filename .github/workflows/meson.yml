@@ -10,32 +10,45 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
+    - name: Enable long paths
+      if: runner.os == 'Windows'
+      run: git config --global core.longpaths true
+
     - uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    - name: Install Meson
-      run: pip install meson
-      
-    - name: Set up GCC
+    - name: Install Meson and Ninja
+      run: python -m pip install meson ninja
+
+    - name: Set up GCC (Linux)
+      if: runner.os == 'Linux'
       uses: egor-tensin/setup-gcc@v2
       with:
         version: 15
         platform: x64
 
-    - name: Install Ninja
+    - name: Set up MSVC (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # MSVC environment variables are exported by msvc-dev-cmd; make
+    # meson select the MSVC compiler explicitly over any gcc on PATH
+    - name: Select MSVC (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
       run: |
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo apt-get update && sudo apt-get install -y ninja-build
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          brew install ninja
-        elif [ "$RUNNER_OS" == "Windows" ]; then
-          choco install ninja
-        fi
+        echo "CC=cl" >> $GITHUB_ENV
+        echo "CXX=cl" >> $GITHUB_ENV
+
+    # macOS builds with the runner's default (Apple clang)
 
     - name: Configure
       run: meson setup build -Dbuildtype=release -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled
