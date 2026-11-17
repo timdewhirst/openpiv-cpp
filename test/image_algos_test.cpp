@@ -6,6 +6,7 @@
 
 // std
 #include <cmath>
+#include <numbers>
 #include <thread>
 
 // local
@@ -27,7 +28,7 @@ TEST_CASE("image_algos_test - FFTTest")
 {
     // generate sinusoidal pattern
     image im{ 256, 256, pixel_format::GREY_F64 };
-    fill( im, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*M_PI*w/8 + 2*M_PI*h/8 ); } );
+    fill( im, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*std::numbers::pi*w/8 + 2*std::numbers::pi*h/8 ); } );
 
     // save
     REQUIRE( save_to_file( "fft-input.pgm", im ) );
@@ -68,12 +69,12 @@ TEST_CASE("image_algos_test - FFT two real images")
 {
     // generate sinusoidal patterns
     image a{ 256, 256, pixel_format::GREY_F64 };
-    fill( a, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*M_PI*w/8 + 2*M_PI*h/8 ); } );
+    fill( a, []( uint32_t w, uint32_t h ){ return 128 * std::sin( 2*std::numbers::pi*w/8 + 2*std::numbers::pi*h/8 ); } );
 
     image b{ 256, 256, pixel_format::GREY_F64 };
     fill( b,
           [width=b.width()]( uint32_t w, uint32_t h ) {
-              return 128 * std::sin( 2*M_PI*(width-w)/8 + 2*M_PI*h/8 );
+              return 128 * std::sin( 2*std::numbers::pi*(width-w)/8 + 2*std::numbers::pi*h/8 );
           } );
 
     // save

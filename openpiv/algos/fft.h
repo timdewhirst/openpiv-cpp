@@ -5,6 +5,7 @@
 #include <exception>
 #include <format>
 #include <functional>
+#include <numbers>
 #include <thread>
 #include <tuple>
 #include <unordered_map>
@@ -392,7 +393,7 @@ namespace openpiv::algos {
                 std::generate(
                     std::begin(twiddle), std::end(twiddle),
                     [i=0, n, scaling]() mutable {
-                        const double theta = (scaling * M_PI * i++)/n;
+                        const double theta = (scaling * std::numbers::pi * i++)/n;
                         return c_f{ std::cos( theta ), std::sin( theta ) };
                     } );
 
