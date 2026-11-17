@@ -58,3 +58,11 @@ jobs:
 
     - name: Test
       run: meson test -C build --print-errorlogs
+
+    # meson truncates printed errorlogs to the last 100 lines, which
+    # the tiff loader warnings flood; rerun the failing test directly
+    # so the whole doctest output reaches the job log
+    - name: Rerun failing tests verbosely
+      if: failure() && runner.os == 'Windows'
+      run: ./build/test/image_algos_test.exe
+      continue-on-error: true
