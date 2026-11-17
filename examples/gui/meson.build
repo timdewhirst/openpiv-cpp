@@ -28,6 +28,10 @@ executable(
   ],
   cpp_args: [
     '-DIMGUI_ENABLE_SDL2_RENDERER',
+    // the gui is a console app that manages its own entry point:
+    // prevent SDL from renaming main (Windows) and expecting the
+    // SDL2main library at link time
+    '-DSDL_MAIN_HANDLED',
   ],
   install: false,
 )
