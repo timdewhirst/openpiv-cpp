@@ -2,7 +2,14 @@ project(
   'openpiv-cpp',
   'cpp',
   version: '0.1.0',
-  default_options: ['cpp_std=c++23']
+)
+
+# request C++23 in a compiler-agnostic way: MSVC does not accept
+# cpp_std=c++23 and requires the dialect as a plain argument
+cpp = meson.get_compiler('cpp')
+add_project_arguments(
+  cpp.get_supported_arguments(['-std=c++23', '/std:c++latest']),
+  language: 'cpp',
 )
 
 # build specific options
