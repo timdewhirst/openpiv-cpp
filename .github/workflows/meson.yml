@@ -51,7 +51,7 @@ jobs:
     # macOS builds with the runner's default (Apple clang)
 
     - name: Configure
-      run: meson setup build -Dbuildtype=release -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled
+      run: meson setup build -Dbuildtype=release -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
 
     - name: Build
       run: meson compile -C build
@@ -59,16 +59,20 @@ jobs:
     - name: Test
       run: meson test -C build --print-errorlogs
 
-    # diagnose image_algos_test on windows: its corr_a.tiff loads
-    # fail with "failed to open" only under meson; show the build/test
-    # directory contents and rerun the binary from that directory via
-    # bash (the environment meson uses is reproduced as far as possible)
+    # diagnose image_algos_test on windows: list the test data, run
+    # the binary from the test workdir as meson does, and dump the
+    # full testlog (meson's printed errorlog is flooded by libtiff
+    # warnings and truncated to the last 100 lines)
     - name: Diagnose failing test (Windows)
       if: failure() && runner.os == 'Windows'
       shell: bash
       run: |
-        echo "=== workspace ==="; pwd; ls build/test | head -12
-        echo "=== corr_a.tiff ==="; ls -la build/test/corr_a.tiff || echo "MISSING"
-        export PATH="$PWD/build/subprojects/mimalloc-3.3.2:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/test:$PATH"
-        cd build/test && ./image_algos_test.exe
+        set +e
+        ls -la build/test/corr_a.tiff
+        export PATH="$PWD/build/test:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/subprojects/mimalloc-3.3.2:$PATH"
+        cd build/test
+        ./image_algos_test.exe; echo "rerun exit=$?"
+        export PATH="$PWD/build/test:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/subprojects/mimalloc-3.3.2:$PATH"
+        echo "=== testlog errors ==="
+        grep -v AdobeDeflate ../meson-logs/testlog.txt | tail -80
       continue-on-error: true
