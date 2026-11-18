@@ -14,7 +14,7 @@ namespace openpiv::core {
     public:
         exception_builder() = default;
 
-        ~exception_builder() noexcept(false)
+        [[noreturn]] ~exception_builder() noexcept(false)
         {
             throw E(ss.str());
         }
