@@ -51,7 +51,7 @@ jobs:
     # macOS builds with the runner's default (Apple clang)
 
     - name: Configure
-      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
+      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled -Dmimalloc:override=false
 
     - name: Build
       run: meson compile -C build
