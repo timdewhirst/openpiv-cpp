@@ -74,3 +74,20 @@ jobs:
         ninja -C build-asan test/image_algos_test
         cd build-asan/test && ASAN_OPTIONS=detect_leaks=0 ./image_algos_test
       continue-on-error: true
+
+    # on windows the same test aborts with STATUS_HEAP_CORRUPTION
+    # (0xc0000374): some write past a heap block. reproduce under
+    # MSVC's AddressSanitizer to have the corrupting write reported
+    # with a stack trace, in a second build directory with mimalloc's
+    # allocator override disabled so the sanitizer owns allocations;
+    # run from the test workdir (data files), with the wrap dlls on
+    # PATH as meson's test runner does
+    - name: Reproduce under ASan (Windows)
+      if: failure() && runner.os == 'Windows'
+      shell: bash
+      run: |
+        meson setup build-asan -Dbuildtype=release -Ddebug=true -Dasan=true -Dmimalloc:override=false -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
+        ninja -C build-asan test/image_algos_test
+        export PATH="$PWD/build-asan/test:$PWD/build-asan/subprojects/tiff-4.7.1/libtiff:$PWD/build-asan/subprojects/zlib-1.3.2:$PWD/build-asan/subprojects/mimalloc-3.3.2:$PATH"
+        cd build-asan/test && ./image_algos_test.exe
+      continue-on-error: true
