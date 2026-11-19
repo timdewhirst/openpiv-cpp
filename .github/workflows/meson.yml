@@ -59,18 +59,20 @@ jobs:
     - name: Test
       run: meson test -C build --print-errorlogs
 
-    # on macOS, image_algos_test reproducibly segfaults in
+    # on macOS, image_algos_test reproducibly crashes in
     # auto_correlate; rerun that single case under lldb and dump
     # backtraces from the point of the crash (the build carries
-    # debug symbols via -Ddebug=true)
+    # debug symbols via -Ddebug=true). run from the test workdir so
+    # the test data files are found
     - name: Backtrace the crashing test (macOS)
       if: failure() && runner.os == 'macOS'
       run: |
         export PATH="$PWD/build/test:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/subprojects/mimalloc-3.3.2:$PATH"
+        cd build/test
         lldb --batch \
           -o run \
           -o "thread backtrace all" \
           -o "register read" \
           -o quit -- \
-          ./build/test/image_algos_test -tc="image_algos_test - auto_correlation_test"
+          ./image_algos_test -tc="image_algos_test - auto_correlation_test"
       continue-on-error: true
