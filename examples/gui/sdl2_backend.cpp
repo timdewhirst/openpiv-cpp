@@ -18,6 +18,9 @@
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
 
+// SDL2
+#include <SDL.h>
+
 namespace {
 
     constexpr ImTextureID sdl_to_imgui(SDL_Texture* t)
