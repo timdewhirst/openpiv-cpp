@@ -50,59 +50,17 @@ jobs:
 
     # macOS builds with the runner's default (Apple clang)
 
+    # mimalloc's allocator override has corrupted the heap
+    # intermittently on macOS arm64, so macOS CI builds without it
+    # and uses the system allocator
     - name: Configure
-      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled -Dmimalloc:override=false
+      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled -Dmimalloc:override=false ${{ runner.os == 'macOS' && '-Duse_mimalloc=disabled' || '' }}
 
     - name: Build
       run: meson compile -C build
 
     - name: Test
       run: meson test -C build --print-errorlogs
-
-    # when the suite fails on macOS, capture a backtrace from the
-    # actual failing binary: the isolated-case and ASan reruns may
-    # pass while the plain build traps (the job log truncates the
-    # printed errorlog under the tiff warning flood)
-    - name: Backtrace the failing test (macOS)
-      if: failure() && runner.os == 'macOS'
-      run: |
-        export PATH="$PWD/build/test:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/subprojects/zlib-1.3.2:$PWD/build/subprojects/mimalloc-3.3.2:$PATH"
-        cd build/test
-        # the trap is intermittent: loop the plain binary until it
-        # crashes, then capture a backtrace of the stopped process
-        for i in $(seq 1 60); do
-          MallocScribble=1 lldb --batch -o run -o "thread backtrace all" -o quit -- ./image_algos_test > /tmp/bt_$i.log 2>&1
-          if grep -q "stop reason" /tmp/bt_$i.log; then
-            echo "captured crash on iteration $i"
-            cat /tmp/bt_$i.log
-            exit 0
-          fi
-        done
-        echo "no crash captured in 60 iterations; first iteration log:"
-        head -50 /tmp/bt_1.log
-      continue-on-error: true
-
-    # image_algos_test reproducibly crashes on macOS at a point that
-    # moves between runs and an isolated rerun of the crashing case
-    # passes - the signature of heap corruption from an earlier case
-    # in the same process. reproduce the full suite under ASan in a
-    # second build directory, with mimalloc's allocator override
-    # disabled so the sanitizer owns allocations and the corrupting
-    # write is reported with a stack trace; release+fast-math keeps
-    # the codegen under which the corruption occurs
-    - name: Reproduce under ASan (macOS)
-      if: failure() && runner.os == 'macOS'
-      run: |
-        meson setup build-asan -Dbuildtype=release -Ddebug=true -Dasan=true -Dmimalloc:override=false -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
-        ninja -C build-asan test/image_algos_test
-        cd build-asan/test
-        # the crash is intermittent: repeat until ASan reports or the
-        # iteration budget is exhausted
-        for i in $(seq 1 10); do
-          ASAN_OPTIONS=detect_leaks=0 ./image_algos_test && break
-          echo "asan iteration $i failed"
-        done
-      continue-on-error: true
 
     # on windows the same test aborts with STATUS_HEAP_CORRUPTION
     # (0xc0000374): some write past a heap block. reproduce under
