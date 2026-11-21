@@ -70,14 +70,16 @@ jobs:
         cd build/test
         # the trap is intermittent: loop the plain binary until it
         # crashes, then capture a backtrace of the stopped process
-        for i in $(seq 1 40); do
+        for i in $(seq 1 60); do
           MallocScribble=1 lldb --batch -o run -o "thread backtrace all" -o quit -- ./image_algos_test > /tmp/bt_$i.log 2>&1
-          if grep -q "stop reason = signal" /tmp/bt_$i.log; then
+          if grep -q "stop reason" /tmp/bt_$i.log; then
             echo "captured crash on iteration $i"
             cat /tmp/bt_$i.log
-            break
+            exit 0
           fi
         done
+        echo "no crash captured in 60 iterations; first iteration log:"
+        head -50 /tmp/bt_1.log
       continue-on-error: true
 
     # image_algos_test reproducibly crashes on macOS at a point that
