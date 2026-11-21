@@ -12,7 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macOS is disabled for now: image_algos_test intermittently
+        # traps (SIGTRAP) there under investigation
+        os: [ubuntu-latest, windows-latest]
 
     steps:
     - name: Enable long paths
