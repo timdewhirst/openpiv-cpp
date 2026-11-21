@@ -44,8 +44,8 @@ namespace openpiv::core::logger {
 }
 
 template <>
-struct std::formatter<openpiv::core::logger::Level, char> 
-    : openpiv::core::StreamableFormatter<openpiv::core::logger::Level> 
+struct std::formatter<openpiv::core::logger::Level, char>
+    : openpiv::core::StreamableFormatter<openpiv::core::logger::Level>
 {};
 
 namespace openpiv::core::logger {
@@ -122,7 +122,7 @@ namespace openpiv::core::logger {
         {
             sink_id_t id{};
             {
-                std::unique_lock<std::mutex> lock(entry_mutex);
+                std::unique_lock<std::mutex> lock(sink_mutex);
                 id = sink_id++;
                 sinks.emplace(id, std::move(sink));
             }
@@ -133,7 +133,7 @@ namespace openpiv::core::logger {
 
         bool remove_sink(sink_id_t id)
         {
-            std::unique_lock<std::mutex> lock(entry_mutex);
+            std::unique_lock<std::mutex> lock(sink_mutex);
             return sinks.erase(id) == 1;
         }
 
@@ -159,6 +159,7 @@ namespace openpiv::core::logger {
         std::deque<entry_t> entries;
         std::atomic<size_t> max_entries{100};
         std::atomic<bool> stop{false};
+        std::mutex sink_mutex;
         std::unordered_map<sink_id_t, sink_t> sinks;
         std::atomic<size_t> sink_id{0};
         std::thread logger_thread;
@@ -171,39 +172,37 @@ namespace openpiv::core::logger {
                 [this](){
                     std::deque<entry_t> local_entries;
 
-                    while (!this->stop)
+                    while (!stop)
                     {
                         // lock/unlock and wait
                         {
                             std::unique_lock<std::mutex> lock(this->entry_mutex);
-                            this->entry_condition.wait(
-                                lock,
-                                [this](){
-                                    return
-                                        this->stop ||
-                                        (!this->sinks.empty() && !this->entries.empty());
-                                });
+                            entry_condition.wait(lock, [this]()->bool {
+                                return stop || !entries.empty();
+                            });
 
                             // okay, got something and somewhere to put it
                             // get everything as quickly as possible
-                            while (!this->entries.empty())
+                            while (!entries.empty())
                             {
                                 local_entries.push_back(std::move(entries.front()));
                                 entries.pop_front();
                             }
                         }
 
-                        // process/push to sinks
-                        for (const auto& entry : local_entries)
                         {
-                            auto [level, log_line] = entry;
-                            for (auto& [id, sink] : sinks)
-                                sink(level, log_line);
+                            std::unique_lock<std::mutex> lock(this->sink_mutex);
+                            // process/push to sinks
+                            for (const auto& entry : local_entries)
+                            {
+                                auto [level, log_line] = entry;
+                                for (auto& [id, sink] : sinks)
+                                    sink(level, log_line);
+                            }
                         }
 
                         // update how many entries we wrote
                         entries_written += local_entries.size();
-
                         local_entries.clear();
                     }
                 });
