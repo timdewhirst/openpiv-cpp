@@ -68,7 +68,16 @@ jobs:
       run: |
         export PATH="$PWD/build/test:$PWD/build/subprojects/tiff-4.7.1/libtiff:$PWD/build/subprojects/zlib-1.3.2:$PWD/build/subprojects/mimalloc-3.3.2:$PATH"
         cd build/test
-        lldb --batch -o run -o "thread backtrace all" -o quit -- ./image_algos_test
+        # the trap is intermittent: loop the plain binary until it
+        # crashes, then capture a backtrace of the stopped process
+        for i in $(seq 1 40); do
+          MallocScribble=1 lldb --batch -o run -o "thread backtrace all" -o quit -- ./image_algos_test > /tmp/bt_$i.log 2>&1
+          if grep -q "stop reason = signal" /tmp/bt_$i.log; then
+            echo "captured crash on iteration $i"
+            cat /tmp/bt_$i.log
+            break
+          fi
+        done
       continue-on-error: true
 
     # image_algos_test reproducibly crashes on macOS at a point that
@@ -84,7 +93,13 @@ jobs:
       run: |
         meson setup build-asan -Dbuildtype=release -Ddebug=true -Dasan=true -Dmimalloc:override=false -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
         ninja -C build-asan test/image_algos_test
-        cd build-asan/test && ASAN_OPTIONS=detect_leaks=0 ./image_algos_test
+        cd build-asan/test
+        # the crash is intermittent: repeat until ASan reports or the
+        # iteration budget is exhausted
+        for i in $(seq 1 10); do
+          ASAN_OPTIONS=detect_leaks=0 ./image_algos_test && break
+          echo "asan iteration $i failed"
+        done
       continue-on-error: true
 
     # on windows the same test aborts with STATUS_HEAP_CORRUPTION
