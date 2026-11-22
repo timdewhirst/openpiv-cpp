@@ -2,12 +2,23 @@ project(
   'openpiv-cpp',
   'cpp',
   version: '0.1.0',
-  default_options: ['cpp_std=c++23']
+)
+
+# request C++23 in a compiler-agnostic way: MSVC does not accept
+# cpp_std=c++23 and requires the dialect as a plain argument
+cpp = meson.get_compiler('cpp')
+add_project_arguments(
+  cpp.get_supported_arguments(['-std=c++23', '/std:c++latest']),
+  language: 'cpp',
 )
 
 # build specific options
 if get_option('buildtype') == 'release'
-  add_project_arguments('-ffast-math', language: 'cpp')
+  if meson.get_compiler('cpp').get_id() == 'msvc'
+    add_project_arguments('/fp:fast', language: 'cpp')
+  else
+    add_project_arguments('-ffast-math', language: 'cpp')
+  endif
 endif
 
 # Options
@@ -33,7 +44,10 @@ doctest_dep = dependency('doctest')
 benchmark_dep = dependency('benchmark_main')
 cxxopts_dep = dependency('cxxopts')
 pocketfft_dep = dependency('pocketfft')
-mimalloc_dep = dependency('mimalloc')
+# mimalloc's allocator override has corrupted the heap intermittently
+# on macOS arm64; CI disables it there via -Duse_mimalloc=disabled and
+# the system allocator is used instead
+mimalloc_dep = dependency('mimalloc', required: get_option('use_mimalloc'))
 
 # Subdirectories
 subdir('openpiv')

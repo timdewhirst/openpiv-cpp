@@ -20,6 +20,13 @@
 #include "core/enum_helper.h"
 #include "core/format_utils.h"
 
+// the Windows SDK (wingdi.h) defines ERROR as a macro, which
+// collides with the Level enumerators below; the SDK does not use
+// it beyond the definition, so drop the macro here
+#ifdef ERROR
+#undef ERROR
+#endif
+
 namespace openpiv::core::logger {
 
     enum class Level : uint8_t {
@@ -88,7 +95,10 @@ namespace openpiv::core::logger {
             if (stop)
                 return {};
 
-            auto now = std::chrono::utc_clock::now();
+            // note: system_clock rather than utc_clock, which
+            // libc++ (macOS) does not implement; the two are
+            // equivalent for log timestamps
+            auto now = std::chrono::system_clock::now();
             auto tid = std::this_thread::get_id();
 
             std::string log_entry = std::vformat(

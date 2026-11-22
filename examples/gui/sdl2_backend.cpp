@@ -37,6 +37,18 @@ namespace {
 
 bool SDL2Backend::init(std::string_view window_title)
 {
+    // the gui target handles its own console entry point (no
+    // SDL2main): on Windows SDL.h renames main to SDL_main unless
+    // SDL_MAIN_HANDLED is defined, and SDL_SetMainReady() must then
+    // be called before SDL_Init(); both are no-ops elsewhere
+    SDL_SetMainReady();
+
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        logger::error("SDL_Init Error: {}", SDL_GetError());
+        return false;
+    }
+
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         logger::error("SDL_Init Error: {}", SDL_GetError());

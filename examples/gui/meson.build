@@ -33,8 +33,12 @@ executable(
     sdl2_image_dep,
     threads_dep,
   ],
+  # the gui is a console app that manages its own entry point:
+  # prevent SDL from renaming main (Windows) and expecting the
+  # SDL2main library at link time
   cpp_args: [
     '-DIMGUI_ENABLE_SDL2_RENDERER',
+    '-DSDL_MAIN_HANDLED',
   ],
   install: false,
 )

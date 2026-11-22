@@ -261,12 +261,14 @@ private:
             throw_pixel_type_mismatch<PixelT>();
     }
 
-    /// error paths are isolated into cold, out-of-line functions:
-    /// their bodies construct formatted exception messages which
-    /// would otherwise prevent at() and friends from being inlined
-    /// into callers
+    /// error paths are isolated into separate functions: their
+    /// bodies construct formatted exception messages which would
+    /// otherwise prevent at() and friends from being inlined into
+    /// callers. Note: the compiler-specific [[gnu::cold, gnu::noinline]]
+    /// annotations were removed for MSVC compatibility - if hot-path
+    /// benchmarks regress, they can be reintroduced behind a
+    /// compiler guard
     template <typename PixelT>
-    [[gnu::cold, gnu::noinline]]
     void throw_pixel_type_mismatch() const
     {
         core::exception_builder<std::runtime_error>()
@@ -274,14 +276,12 @@ private:
             << " does not match " << fmt_;
     }
 
-    [[gnu::cold, gnu::noinline]]
     void throw_pixel_index_out_of_range( index_t i ) const
     {
         core::exception_builder<std::out_of_range>()
             << "pixel index out of range: " << i << ", max is: " << pixel_count();
     }
 
-    [[gnu::cold, gnu::noinline]]
     void throw_point_out_of_range( const point2<uint32_t>& xy ) const
     {
         core::exception_builder<std::out_of_range>()
