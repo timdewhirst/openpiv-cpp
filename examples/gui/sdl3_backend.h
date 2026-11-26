@@ -1,9 +1,8 @@
-
 #pragma once
 
 // SDL
-#include <SDL.h>
-#include <SDL_render.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
 
 // openpiv
 #include "core/image.h"
@@ -11,7 +10,7 @@
 // local
 #include "backend.h"
 
-class SDL2Backend : public Backend
+class SDL3Backend : public Backend
 {
 public:
     bool init(std::string_view) override;

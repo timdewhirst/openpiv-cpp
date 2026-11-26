@@ -138,7 +138,7 @@ void setup_dialog(RenderNodeManager& m)
                  ImGui::Begin("OpenPIV GUI", &dialog_active);
 
                  ImGui::Text("Welcome to OpenPIV GUI Example");
-                 ImGui::Text("This is a basic Dear ImGui + SDL2 application.");
+                 ImGui::Text("This is a basic Dear ImGui + SDL3 application.");
                  ImGui::Separator();
 
                  // Simple demo content
@@ -332,7 +332,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    auto backend = Backend::create("sdl2");
+    auto backend = Backend::create("sdl3");
     if (!backend) {
         logger::error("failed to create backend");
         return 1;

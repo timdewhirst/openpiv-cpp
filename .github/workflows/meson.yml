@@ -56,7 +56,7 @@ jobs:
     # intermittently on macOS arm64, so macOS CI builds without it
     # and uses the system allocator
     - name: Configure
-      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled -Dmimalloc:override=false ${{ runner.os == 'macOS' && '-Duse_mimalloc=disabled' || '' }}
+      run: meson setup build -Dbuildtype=release -Ddebug=true -Dimgui:sdl3=enabled -Dimgui:sdl3_renderer=enabled -Dlibtiff:zlib=enabled -Dmimalloc:override=false ${{ runner.os == 'macOS' && '-Duse_mimalloc=disabled' || '' }}
 
     - name: Build
       run: meson compile -C build
@@ -74,7 +74,7 @@ jobs:
     - name: Reproduce under ASan (Windows)
       if: failure() && runner.os == 'Windows'
       run: |
-        meson setup build-asan -Dbuildtype=release -Ddebug=true -Dasan=true -Dmimalloc:override=false -Dimgui:sdl2=enabled -Dimgui:sdl2_renderer=enabled -Dlibtiff:zlib=enabled
+        meson setup build-asan -Dbuildtype=release -Ddebug=true -Dasan=true -Dmimalloc:override=false -Dimgui:sdl3=enabled -Dimgui:sdl3_renderer=enabled -Dlibtiff:zlib=enabled
         meson compile -C build-asan image_algos_test
         $env:PATH = "${{ github.workspace }}\build-asan\test;${{ github.workspace }}\build-asan\subprojects\tiff-4.7.1\libtiff;${{ github.workspace }}\build-asan\subprojects\zlib-1.3.2;${{ github.workspace }}\build-asan\subprojects\mimalloc-3.3.2;$env:PATH"
         $env:ASAN_OPTIONS = "detect_leaks=0:halt_on_error=1:abort_on_error=1"

@@ -1,5 +1,4 @@
-
-#include "sdl2_backend.h"
+#include "sdl3_backend.h"
 
 // std
 #include <cstdint>
@@ -12,14 +11,14 @@
 #include "core/pixel_types.h"
 
 // imgui
-#include "imgui_impl_sdl2.h"
-#include "imgui_impl_sdlrenderer2.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_sdlrenderer3.h"
 
 using namespace openpiv;
 namespace logger = openpiv::core::logger;
 
-// SDL2
-#include <SDL.h>
+// SDL3
+#include <SDL3/SDL.h>
 
 namespace {
 
@@ -35,35 +34,23 @@ namespace {
 
 }
 
-bool SDL2Backend::init(std::string_view window_title)
+bool SDL3Backend::init(std::string_view window_title)
 {
-    // the gui target handles its own console entry point (no
-    // SDL2main): on Windows SDL.h renames main to SDL_main unless
-    // SDL_MAIN_HANDLED is defined, and SDL_SetMainReady() must then
-    // be called before SDL_Init(); both are no-ops elsewhere
-    SDL_SetMainReady();
-
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    // Initialize SDL (returns bool in SDL3)
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
         logger::error("SDL_Init Error: {}", SDL_GetError());
         return false;
     }
 
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        logger::error("SDL_Init Error: {}", SDL_GetError());
-        return false;
-    }
-
-    // Set up SDL window
+    // Set up SDL window; SDL3 takes no position in SDL_CreateWindow,
+    // so center it explicitly. SDL_WINDOW_ALLOW_HIGHDPI is gone:
+    // high-DPI scaling is always on
     const int width = 1280;
     const int height = 720;
     window_ = SDL_CreateWindow(window_title.data(),
-                               SDL_WINDOWPOS_CENTERED,
-                               SDL_WINDOWPOS_CENTERED,
                                width,
                                height,
-                               SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
+                               SDL_WINDOW_RESIZABLE
                                );
 
     if (!window_) {
@@ -71,12 +58,11 @@ bool SDL2Backend::init(std::string_view window_title)
         SDL_Quit();
         return false;
     }
+    SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
-    // Create SDL renderer
-    renderer_ = SDL_CreateRenderer(window_,
-                                   -1,
-                                   SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-                                   );
+    // Create SDL renderer; the driver index and creation flags are
+    // gone in SDL3, vsync is set separately
+    renderer_ = SDL_CreateRenderer(window_, nullptr);
 
     if (!renderer_) {
         logger::error("SDL_CreateRenderer error: {}", SDL_GetError());
@@ -84,15 +70,16 @@ bool SDL2Backend::init(std::string_view window_title)
         SDL_Quit();
         return false;
     }
+    SDL_SetRenderVSync(renderer_, 1);
 
     // Initialize platform/renderer backends
-    ImGui_ImplSDL2_InitForSDLRenderer(window_, renderer_);
-    ImGui_ImplSDLRenderer2_Init(renderer_);
+    ImGui_ImplSDL3_InitForSDLRenderer(window_, renderer_);
+    ImGui_ImplSDLRenderer3_Init(renderer_);
 
     return true;
 }
 
-void SDL2Backend::run(const std::function<bool()>& draw_callback)
+void SDL3Backend::run(const std::function<bool()>& draw_callback)
 {
     // Main loop
     while (!done_) {
@@ -102,8 +89,8 @@ void SDL2Backend::run(const std::function<bool()>& draw_callback)
     }
 
     // clean up - we're done
-    ImGui_ImplSDLRenderer2_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplSDLRenderer3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 
     SDL_DestroyRenderer(renderer_);
@@ -111,41 +98,40 @@ void SDL2Backend::run(const std::function<bool()>& draw_callback)
     SDL_Quit();
 }
 
-void SDL2Backend::begin_frame()
+void SDL3Backend::begin_frame()
 {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        ImGui_ImplSDL2_ProcessEvent(&event);
+        ImGui_ImplSDL3_ProcessEvent(&event);
 
-        if (event.type == SDL_QUIT) {
+        if (event.type == SDL_EVENT_QUIT) {
             done_ = true;
         }
-        if (event.type == SDL_WINDOWEVENT &&
-            event.window.event == SDL_WINDOWEVENT_CLOSE &&
+        if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
             event.window.windowID == SDL_GetWindowID(window_)) {
             done_ = true;
         }
     }
 
     // Start the Dear ImGui frame
-    ImGui_ImplSDLRenderer2_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
 
     ImGui::NewFrame();
 }
 
-void SDL2Backend::end_frame()
+void SDL3Backend::end_frame()
 {
     // Rendering
     ImGui::Render();
 
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
-    ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer_);
+    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer_);
     SDL_RenderPresent(renderer_);
 }
 
-bool SDL2Backend::should_close() const
+bool SDL3Backend::should_close() const
 {
     return done_;
 }
@@ -159,13 +145,13 @@ namespace
     /// (SDL's *A8888 names refer to masks within a 32-bit word, not
     /// to memory order on this platform)
 #if SDL_BYTEORDER == SDL_LIL_ENDIAN
-    constexpr uint32_t display_format = SDL_PIXELFORMAT_ABGR8888;
+    constexpr SDL_PixelFormat display_format = SDL_PIXELFORMAT_ABGR8888;
 #else
-    constexpr uint32_t display_format = SDL_PIXELFORMAT_RGBA8888;
+    constexpr SDL_PixelFormat display_format = SDL_PIXELFORMAT_RGBA8888;
 #endif
 }
 
-ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
+ImTextureID SDL3Backend::load_image(const openpiv::core::image& im)
 {
     using namespace openpiv::core;
 
@@ -243,14 +229,14 @@ ImTextureID SDL2Backend::load_image(const openpiv::core::image& im)
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
 
     auto id = sdl_to_imgui(texture);
-    logger::debug("SDL2Backend::load_image: {}", id);
+    logger::debug("SDL3Backend::load_image: {}", id);
     return id;
 }
 
-void SDL2Backend::unload_image(ImTextureID texture)
+void SDL3Backend::unload_image(ImTextureID texture)
 {
     if (texture != ImTextureID_Invalid) {
-        logger::debug("SDL2Backend::unload_image: {}", texture);
+        logger::debug("SDL3Backend::unload_image: {}", texture);
         SDL_DestroyTexture(imgui_to_sdl(texture));
     }
 }
